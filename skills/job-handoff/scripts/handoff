@@ -14,7 +14,7 @@ VERSION=0.1.0
 ROOT=$HOME/.job-handoff
 SELF=${BASH_SOURCE[0]}
 REMOTE_BIN='$HOME/.job-handoff/bin/handoff'     # expanded by the remote shell
-DEFAULT_FETCH='rsync -az {host}:{remote} {local}/'
+DEFAULT_FETCH='rsync -az -e "ssh -o BatchMode=yes -o LogLevel=ERROR" {host}:{remote} {local}/'
 
 die() { echo "handoff: $*" >&2; exit 1; }
 now() { date '+%Y-%m-%dT%H:%M:%S%z'; }
@@ -37,14 +37,14 @@ fill() {
 # Run a handoff subcommand on another host. Stdin passes through.
 rsh() {
   local h=$1; shift
-  ssh -o BatchMode=yes "$h" "$REMOTE_BIN $(printf '%q ' "$@")"
+  ssh -o BatchMode=yes -o LogLevel=ERROR "$h" "$REMOTE_BIN $(printf '%q ' "$@")"
 }
 
 # Same, for calls that leave a detached process behind. Some bastions keep the
 # channel open after such a launch, so the connection is dropped after 60 s.
 rsh_detach() {
   local h=$1 pid killer rc=0; shift
-  { ssh -o BatchMode=yes "$h" "$REMOTE_BIN $(printf '%q ' "$@")" <&3 & } 3<&0
+  { ssh -o BatchMode=yes -o LogLevel=ERROR "$h" "$REMOTE_BIN $(printf '%q ' "$@")" <&3 & } 3<&0
   pid=$!
   ( sleep 60; kill "$pid" ) </dev/null >/dev/null 2>&1 &
   killer=$!
@@ -79,7 +79,7 @@ install_remote() {
   local mark=$ROOT/hosts/.installed-$1 sum
   sum=$(cksum < "$SELF")
   if [ -f "$mark" ] && [ "$(cat "$mark")" = "$sum" ]; then return 0; fi
-  ssh -o BatchMode=yes "$1" 'mkdir -p "$HOME/.job-handoff/bin" && cat > "$HOME/.job-handoff/bin/handoff.new" && chmod +x "$HOME/.job-handoff/bin/handoff.new" && mv "$HOME/.job-handoff/bin/handoff.new" "$HOME/.job-handoff/bin/handoff"' < "$SELF"
+  ssh -o BatchMode=yes -o LogLevel=ERROR "$1" 'mkdir -p "$HOME/.job-handoff/bin" && cat > "$HOME/.job-handoff/bin/handoff.new" && chmod +x "$HOME/.job-handoff/bin/handoff.new" && mv "$HOME/.job-handoff/bin/handoff.new" "$HOME/.job-handoff/bin/handoff"' < "$SELF"
   echo "$sum" > "$mark"
 }
 
@@ -167,7 +167,7 @@ cmd_host() {
       done
       mkdir -p "$ROOT/hosts" "$ROOT/jobs"
       if [ -z "$SCHEDULER" ]; then
-        SCHEDULER=$(ssh -o BatchMode=yes "$alias" 'bash -c "command -v sbatch >/dev/null && echo slurm || echo none"' </dev/null)
+        SCHEDULER=$(ssh -o BatchMode=yes -o LogLevel=ERROR "$alias" 'bash -c "command -v sbatch >/dev/null && echo slurm || echo none"' </dev/null)
       fi
       case $SCHEDULER in none|slurm) ;; *) die "scheduler must be none or slurm" ;; esac
       install_remote "$alias"
@@ -187,12 +187,12 @@ cmd_host() {
 }
 
 cmd_doctor() {
-  local bad=0 names n first watch
+  local bad=0 names n watch
   check() {
     local label=$1; shift
     if "$@" </dev/null >/dev/null 2>&1; then echo "ok    $label"; else echo "FAIL  $label"; bad=1; fi
   }
-  probe() { ssh -o BatchMode=yes -o ConnectTimeout=20 "$1" "bash -c $(printf %q "$2")"; }
+  probe() { ssh -o BatchMode=yes -o LogLevel=ERROR -o ConnectTimeout=20 "$1" "bash -c $(printf %q "$2")"; }
   load_config
   check "local: ssh" command -v ssh
   check "local: rsync" command -v rsync
@@ -210,11 +210,10 @@ cmd_doctor() {
       watch=$RELAY
       check "$RELAY: login without a prompt" probe "$RELAY" true
       check "$RELAY: nohup, setsid, rsync" probe "$RELAY" 'command -v nohup && command -v setsid && command -v rsync'
-      check "$RELAY -> $RELAY_COMPUTE: login without a prompt" probe "$RELAY" "ssh -o BatchMode=yes -o ConnectTimeout=20 $RELAY_COMPUTE true"
+      check "$RELAY -> $RELAY_COMPUTE: login without a prompt" probe "$RELAY" "ssh -o BatchMode=yes -o LogLevel=ERROR -o ConnectTimeout=20 $RELAY_COMPUTE true"
     fi
     if [ -n "$WAKE_CMD" ]; then
-      first=${WAKE_CMD%% *}
-      check "$watch: wake command '$first' is installed" probe "$watch" "command -v $first"
+      echo "note  $watch: the wake command is not run by doctor; test it once by hand (see references/configuration.md)"
     fi
   done
   return "$bad"
@@ -371,8 +370,8 @@ fetch_results() {
   [ -n "$FETCH" ] || return 0
   local p
   mkdir -p "$INTO"
-  if [ -n "$RELAY" ]; then
-    rsync -az "$RELAY:.job-handoff/jobs/$ID/results/" "$INTO/"
+  if [ -n "$RELAY" ] && [ "$RELAY_FETCH_CMD" != none ]; then
+    rsync -az -e "ssh -o BatchMode=yes -o LogLevel=ERROR" "$RELAY:.job-handoff/jobs/$ID/results/" "$INTO/"
   else
     while IFS= read -r p; do
       [ -n "$p" ] || continue
@@ -756,7 +755,7 @@ cmd__watch() {
     break
   done
 
-  if [ -n "$VIA" ] && [ -n "$FETCH" ]; then
+  if [ -n "$VIA" ] && [ -n "$FETCH" ] && [ "$FETCH_TEMPLATE" != none ]; then
     mkdir -p results
     while IFS= read -r p; do
       [ -n "$p" ] || continue

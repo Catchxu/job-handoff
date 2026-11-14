@@ -58,7 +58,7 @@ handoff host add <alias> [--scheduler none|slurm] [--relay <alias>]
 | `--relay` | SSH alias of the relay, as seen from the user's machine. Omit to run the watcher on the compute host. |
 | `--relay-compute` | The compute host's alias in the relay's own SSH config. Defaults to the same alias. |
 | `--fetch-cmd` | Command that copies results from the compute host to the user's machine. Default `rsync -az {host}:{remote} {local}/`. Placeholders: `{host}`, `{remote}`, `{local}`. |
-| `--relay-fetch-cmd` | The same, run on the relay to prefetch results. |
+| `--relay-fetch-cmd` | The same, run on the relay to prefetch results. `none` skips the prefetch: results then come straight from the compute host at `handoff back`. |
 
 Run `handoff host add` again to change a profile. `handoff doctor` checks every
 profile; fix each `FAIL` before the first handoff.
@@ -67,7 +67,8 @@ profile; fix each `FAIL` before the first handoff.
 
 Some bastions allow neither rsync nor scp. Give the profile the site's own
 transfer command, for example `--fetch-cmd 'mytransfer get {remote} {local}'`.
-With a relay, the same tool has to exist on the relay (`--relay-fetch-cmd`).
+With a relay, either install the same tool on the relay (`--relay-fetch-cmd`)
+or pass `--relay-fetch-cmd none` to skip the prefetch.
 
 ### Clusters with two-factor login
 
@@ -118,8 +119,10 @@ Requirements on the watch host:
   and export the token on the watch host, or log in once interactively there.
   Codex: `codex login --device-auth`.
 - The watcher runs in a non-interactive shell that does not read `~/.bashrc`.
-  If the agent is not on the default `PATH` or needs environment variables,
-  put them in a file on the watch host (`chmod 600`) and source it first:
+  The native Claude Code installer puts `claude` in `~/.local/bin`, which is
+  not on that shell's `PATH`: start the command with
+  `export PATH=$HOME/.local/bin:$PATH;`. Tokens and other variables can go in
+  a file on the watch host (`chmod 600`) that the command sources first:
   `WAKE_CMD='. ~/.job-handoff/agent.env; claude -p ...'`.
 
 `report` mode, the agent has no tools:
@@ -149,6 +152,6 @@ Replace `lab` with the compute host's alias on the relay. In `act` mode the
 agent requests a follow-up run by writing its command into `./next_cmd`; the
 watcher starts and follows it, within `MAX_ATTEMPTS`.
 
-`handoff doctor` checks that the first word of `WAKE_CMD` exists on the watch
-host. It does not check the login; test that once by hand:
-`ssh <watch host> 'claude -p "say ok" --tools ""'`.
+`handoff doctor` does not run the wake command. Test it once by hand, in the
+same non-interactive shell the watcher uses:
+`ssh <watch host> 'export PATH=$HOME/.local/bin:$PATH; claude -p "say ok" --tools ""'`.

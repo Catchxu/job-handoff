@@ -137,11 +137,11 @@ Version 0.1.0.
 
 | Part | Tested |
 |---|---|
-| Plain SSH host: launch, leave, playbook follow-ups, return, fetch | On a real server |
-| Layer 2 `report` mode with Codex | With the real agent |
-| SLURM | In a simulation only; not yet on a real cluster |
+| Plain SSH host: launch, leave, playbook follow-ups, return, fetch | On real servers, one of them behind a bastion |
+| SLURM: launch, playbook follow-up, cancel, adopt, return, fetch | On a real cluster (SLURM 25.11) |
+| Layer 2 `report` mode | With real Claude Code and real Codex |
 | Relay | In a simulation only |
-| Layer 2 with Claude Code; `act` mode | Not yet with a real agent |
+| Layer 2 `act` mode | In a simulation only, not yet with a real agent |
 | macOS as the local machine | Not tested |
 
 ## Limits

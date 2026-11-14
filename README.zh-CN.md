@@ -1,56 +1,123 @@
-# job-handoff
+<div align="center">
 
-[English](README.md) | **简体中文**
+<img src="assets/banner.svg" alt="job-handoff" width="100%">
 
-一个给 Claude Code 和 Codex 用的 agent skill。对你的 agent 说一句"我要走了"，合上电脑，
-远程服务器上的任务照常推进；回来说一句"我回来了"，agent 从断开的地方接着干。
+<h3>合上电脑，远程任务照常推进。</h3>
 
-它面向用笔记本指挥实验室服务器或 HPC 集群的人：任务在那边跑，agent 在这边跑，而笔记本要被带走。
+一个给 <b>Claude Code</b> 和 <b>Codex</b> 用的 agent skill。<br>
+说一句“我要走了”，守望脚本就在实验室服务器或集群上替你跟着任务。<br>
+说一句“我回来了”，agent 从断开的地方接着干。
 
-## 问题
+<p>
+<img src="https://img.shields.io/badge/version-0.1.0-0969da?style=flat-square" alt="版本 0.1.0">
+<img src="https://img.shields.io/badge/license-MIT-1a7f37?style=flat-square" alt="MIT 许可证">
+<img src="https://img.shields.io/badge/Claude_Code-skill-d97757?style=flat-square" alt="Claude Code skill">
+<img src="https://img.shields.io/badge/Codex-skill-10a37f?style=flat-square" alt="Codex skill">
+<img src="https://img.shields.io/badge/SSH_%C2%B7_SLURM-supported-8250df?style=flat-square" alt="支持 SSH 和 SLURM">
+<img src="https://img.shields.io/badge/pure-bash-4eaa25?style=flat-square&logo=gnubash&logoColor=white" alt="纯 bash">
+</p>
 
+<a href="README.md">English</a> · <b>简体中文</b>
+
+<a href="#为什么需要它">为什么需要它</a> ·
+<a href="#工作方式">工作方式</a> ·
+<a href="#两层实现">两层实现</a> ·
+<a href="#快速上手">快速上手</a> ·
+<a href="#警告">警告</a>
+
+</div>
+
+<br>
+
+> **你** &nbsp; 我要走了，`lab` 上的微调帮我盯着。
+>
+> **Agent** &nbsp; 已交接，当前是第一层：训练跑完我会接着跑评估；如果显存不够，我用 batch 128 重跑一次。其他情况等你回来处理。可以合上电脑了。
+>
+> <sub>— 八小时后 —</sub>
+>
+> **你** &nbsp; 我回来了。
+>
+> **Agent** &nbsp; 第一次训练在第 2 轮之后显存溢出，改用 batch 128 重跑成功，评估准确率 91.2%。结果已经放在 `./results`。
+
+## 为什么需要它
+
+你用笔记本指挥实验室服务器或 HPC 集群：任务在那边跑，agent 在这边跑，而笔记本要被带走。
 合上电脑会丢掉三样东西：
 
-| 丢掉的东西 | 代价 |
-|---|---|
-| **任务本身**（如果它是 agent 通过自己的连接启动的） | 任务跟着会话一起断掉。 |
-| **agent 对"在等什么"的记忆** | 回来后要重新交代：哪个任务、日志在哪、怎么算完成、下一步做什么。 |
-| **任务结束到你回来之间的时间** | 凌晨 2 点跑完，GPU 空到早上；或者排队 5 小时，启动 2 分钟就因为路径写错而失败，第二天才发现。 |
+<table>
+<tr>
+<td width="33%" valign="top">
+<h4>💥 任务</h4>
+agent 通过自己的连接启动的任务，会跟着会话一起断掉。
+</td>
+<td width="33%" valign="top">
+<h4>🧠 上下文</h4>
+回来后要重新交代：哪个任务、日志在哪、怎么算完成、下一步做什么。
+</td>
+<td width="33%" valign="top">
+<h4>🌙 一整夜</h4>
+凌晨 2 点跑完，GPU 空到早上。或者排队 5 小时，启动 2 分钟就崩了，第二天才发现。
+</td>
+</tr>
+</table>
 
 云端的 agent 会话解决不了这个问题：它连不上堡垒机后面的私有服务器，也连不上校园集群。
 
-## 两层实现
-
-job-handoff 分两层。第一层默认开启，第二层需要你主动开启。
-
-| | 第一层：交接（Handoff） | 第二层：唤醒（Wake） |
-|---|---|---|
-| **你离开期间运行的东西** | 一个很小的守望脚本，没有 AI。 | 守望脚本，再加一个 AI agent：任务链结束时被启动，处理完就退出。 |
-| **你得到什么** | 任务不会断。一份交接记录（说明、状态、日志）让任何会话都能接上。离开前写好的**预案**（playbook）会按固定规则执行，例如"成功就跑评估""显存不够就把 batch 减半重跑"。可以提前取回结果、发送通知。回来后一条命令给出完整报告并收回结果；任务还没跑完的话，agent 重新接手。 | 你不在时也有判断力。`report` 模式下，agent 读交接说明、结果和日志，写一份报告。`act` 模式下，它还能查看计算服务器，并申请再跑一轮。 |
-| **需要什么** | 能 SSH 登录计算服务器。服务器上不需要手动安装任何东西。 | 第一层的条件，再加上：守望脚本所在的机器装有并登录了 Claude Code 或 Codex，且位于服务商支持的地区。 |
-| **风险** | 预案写错会浪费算力。 | 一个无人值守、能执行命令的 agent。见下方警告。 |
-
-第一层处理你能预见的情况，第二层处理你预见不到的情况。
-
 ## 工作方式
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/flow-zh-dark.svg">
+  <img src="assets/flow-zh-light.svg" alt="流程：handoff launch 在计算服务器上脱离终端启动任务；handoff leave 在守望机上启动守望脚本；电脑合上期间，守望脚本跟踪任务、执行预案，第二层还会唤醒 agent 写报告；handoff back 取回报告和结果。" width="100%">
+</picture>
+
+- **`handoff launch`**：脱离终端启动任务，任务不会随会话断掉。
+- **`handoff leave`**：保存交接说明，启动守望脚本。之后可以合上电脑。
+- **`handoff back`**：给出报告，收回结果；守望脚本如果还在等待就停掉它，由 agent 重新接手。
+
+全部功能由一个 bash 脚本完成。它会把自己复制到远程机器，服务器上不需要手动安装任何东西。
+
+## 两层实现
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/layers-zh-dark.svg">
+  <img src="assets/layers-zh-light.svg" alt="第一层“交接”默认开启：一个很小的守望脚本，没有 AI。第二层“唤醒”需主动开启：任务链结束时唤醒一个 agent。" width="100%">
+</picture>
+
+| | 第一层 · 交接 | 第二层 · 唤醒 |
+|---|---|---|
+| **你离开期间运行的东西** | 一个守望脚本，没有 AI。 | 守望脚本，再加一个 agent：任务链结束时启动，处理完就退出。 |
+| **处理什么** | 你预见到的情况，靠离开前写好的预案。 | 你没预见到的情况。`report` 模式写一份报告；`act` 模式还能查看服务器，并申请再跑一轮。 |
+| **需要什么** | 能 SSH 登录计算服务器。 | 守望机上装有并登录了 Claude Code 或 Codex，且位于服务商支持的地区。 |
+| **风险** | 预案写错会浪费算力。 | 一个无人值守、能执行命令的 agent。请先读[警告](#警告)。 |
+
+第一层默认开启。第二层在你主动开启之前一直是关闭的。
+
+### 预案：现在做决定，之后再执行
+
+预案（playbook）是一段很短的 bash 脚本，由 agent 在你离开前写好并交给你确认。
+每一轮任务结束时，守望脚本都会执行它。
+
+```bash
+# 第一轮显存不够：把 batch 减半，重跑一次
+if [ "$HANDOFF_ATTEMPT" = 1 ] && grep -q 'CUDA out of memory' "$HANDOFF_LOG"; then
+  echo 'python train.py --batch-size 128' > "$HANDOFF_NEXT"
+fi
 ```
-你的电脑                     守望机                              计算服务器
-(agent + handoff)            (计算服务器本身，或一台中转机)      (SSH 服务器 / SLURM)
 
-handoff launch  ───────────────────────────────────────────────▶ 任务脱离终端启动
-handoff leave   ──▶ 守望脚本启动 ──── 定时查状态 ──────────────▶ 任务结束
-                     │  执行预案 ──────────────────────────────▶ 再跑一轮（可选）
-   电脑合上          │  第二层：唤醒 agent，保存它的报告
-                     │  提前取回结果，发送通知
-handoff back    ──▶ 报告 + 结果；仍在等待的守望脚本会被停掉
-```
+一次交接最多运行 `MAX_ATTEMPTS` 轮（默认 3），规则不会无限循环。
+更多写法见[预案说明](skills/job-handoff/references/playbook.md)（英文）。
 
-守望脚本默认就跑在计算服务器上。只有两种情况需要单独的**中转机**（任意一台常开的小型
-Linux 机器）：计算服务器不允许长期运行的进程；或者想用第二层，而计算服务器上跑不了 agent。
-只用第一层时，中转机放在哪里都可以。
+### 守望脚本跑在哪里
 
-## 安装
+| 你的情况 | 守望机 |
+|---|---|
+| 普通服务器或集群 | 计算服务器本身，不需要额外准备。 |
+| 登录节点不允许长期运行的进程 | 一台中转机：任意一台常开的小型 Linux 机器。只用第一层时，它放在哪里都可以。 |
+| 想用第二层，但计算服务器上跑不了 agent | 一台位于 agent 服务商支持地区的中转机。 |
+
+## 快速上手
+
+**1. 安装**
 
 ```bash
 git clone https://github.com/Catchxu/job-handoff.git
@@ -60,37 +127,44 @@ git clone https://github.com/Catchxu/job-handoff.git
 ./job-handoff/install.sh
 ```
 
-`install.sh` 会把 skill 链接到 `~/.claude/skills`（Claude Code）和 `~/.agents/skills`（Codex），
+安装脚本会把 skill 链接到 `~/.claude/skills`（Claude Code）和 `~/.agents/skills`（Codex），
 并把 `handoff` 命令链接到 `~/.local/bin`。
+本机需要 `bash`、`ssh`、`rsync`；远程机器需要 `bash`、`nohup`、`setsid`，Linux 都自带。
 
-环境要求：本机有 `bash`、`ssh`、`rsync`；远程机器有 `bash`、`nohup`、`setsid`（Linux 自带）。
-
-## 使用
-
-直接和你的 agent 说话，skill 会告诉它该做什么。
+**2. 直接和 agent 说话**
 
 | 你说 | agent 做的事 |
 |---|---|
-| "帮我给服务器 `lab` 配置 job-handoff" | 问几个问题（服务器、中转机、通知方式、是否开第二层），写好配置，运行 `handoff doctor` 检查。 |
-| "在 `lab` 上开始训练" | 用 `handoff launch` 启动，任务不会随会话断掉。 |
-| "我要走了" | 写交接说明，拟一份预案给你确认，运行 `handoff leave`，并告诉你离开期间会发生什么、不会发生什么。 |
-| "我回来了" | 运行 `handoff back`，读报告，收回结果，接着干活。 |
+| “帮我给服务器 `lab` 配置 job-handoff” | 询问服务器、中转机、通知方式和是否开第二层，写好配置，运行 `handoff doctor` 检查。 |
+| “在 `lab` 上开始训练” | 用 `handoff launch` 启动，任务不会随会话断掉。 |
+| “我要走了” | 写交接说明，拟一份预案给你确认，运行 `handoff leave`，并告诉你离开期间会发生什么、不会发生什么。 |
+| “我回来了” | 运行 `handoff back`，读报告，收回结果，接着干活。 |
 
-在命令行里做同样的事：
+<details>
+<summary><b>想直接用命令行？</b></summary>
+
+<br>
 
 ```bash
-handoff init
-handoff host add lab                       # 自动识别 SLURM
-handoff doctor
+handoff init                    # 生成 ~/.job-handoff/config
+handoff host add lab            # 自动识别 SLURM
+handoff doctor                  # 每一行都应该是 ok
 
 handoff launch --host lab --name bert-ft --dir ~/proj --cmd 'python train.py'
-# ... 把交接说明写进这条命令打印的文件：handoff notes <id>
+handoff notes <id>              # 打印交接说明文件的路径，把说明写进去
 handoff leave <id> --playbook playbook.sh --fetch out/metrics.json --into ./results
 handoff back
 ```
 
-详细说明（英文）：[配置](skills/job-handoff/references/configuration.md)、
-[预案](skills/job-handoff/references/playbook.md)。
+在 SLURM 集群上，参数会原样交给 `sbatch`：
+
+```bash
+handoff launch --host hpc --name bert-ft --dir ~/proj -- train.sbatch
+```
+
+全部设置见[配置说明](skills/job-handoff/references/configuration.md)（英文）。
+
+</details>
 
 ## 警告
 
@@ -114,8 +188,21 @@ handoff back
 >   处理不可信输入的任务，不要用 `act` 模式。
 > - agent 的登录令牌存放在守望机上。能访问那台机器的人，就能使用你的 Claude 或 Codex 账号。
 > - 每次唤醒都会在你看不到的时候消耗订阅额度或 API 费用。
-> - agent 只看得到交接说明、日志末尾和预案输出，看不到你们的对话。
+> - agent 只看得到交接说明、各轮日志的末尾和预案输出，看不到你们的对话。
 > - 在共享集群的登录节点上运行 AI agent，可能违反集群规定。
+
+## 和其他做法的对比
+
+| | `nohup` / `tmux` | 云端 agent 会话 | 让 agent 常驻服务器 | **job-handoff** |
+|---|:---:|:---:|:---:|:---:|
+| 连得上私有服务器或集群 | ✅ | ❌ | ✅ | ✅ |
+| 合上电脑，任务不断 | ✅ | ➖ | ✅ | ✅ |
+| agent 带着完整上下文接上 | ❌ | ➖ | ✅ | ✅ |
+| 任务结束时有后续动作 | ❌ | ➖ | ✅ | ✅ |
+| 没有常驻的、能执行命令的 agent | ✅ | ✅ | ❌ | ✅ |
+
+➖ 表示不适用：云端会话根本连不上那个任务。
+使用 job-handoff 时，第一层在你离开期间没有 agent 在运行；第二层只在任务链结束时运行一分钟左右。
 
 ## 当前状态
 
@@ -123,19 +210,20 @@ handoff back
 
 | 部分 | 测试情况 |
 |---|---|
-| 普通 SSH 服务器：启动、交接、预案续跑、返回、取回结果 | 已在真实服务器上测试，其中一台在堡垒机后面 |
-| SLURM：启动、预案续跑、取消、接管已有作业、返回、取回结果 | 已在真实集群上测试（SLURM 25.11） |
-| 第二层 `report` 模式 | 已用真实的 Claude Code 和 Codex 测试 |
-| 中转机：守望脚本跑在另一台服务器上，计算服务器在堡垒机后面，并启用第二层 `report` | 已在真实服务器上测试 |
-| 第二层 `act` 模式 | 只在模拟环境中测试，尚未用真实 agent 测试 |
-| 本机为 macOS | 未测试 |
+| 普通 SSH 服务器：启动、交接、预案续跑、返回、取回结果 | ✅ 真实服务器，其中一台在堡垒机后面 |
+| SLURM：启动、预案续跑、取消、接管已有作业、返回、取回结果 | ✅ 真实集群（SLURM 25.11） |
+| 中转机，计算服务器在堡垒机后面 | ✅ 真实服务器 |
+| 第二层 `report` 模式 | ✅ 真实的 Claude Code 和 Codex |
+| 第二层 `act` 模式 | 🧪 只在模拟环境中测试 |
+| 本机为 macOS | ⬜ 未测试 |
 
 ## 限制
 
 - 跑在你自己电脑上的任务会随电脑一起停，无法交接。
 - 没有脱离终端启动的任务救不回来。请用 `handoff launch` 启动任务。
 - 不支持 SLURM 的 job array，也不支持其他调度器（PBS、LSF）。
+- 一次交接只跟一条任务链。多个任务需要多次交接。
 
 ## 许可证
 
-MIT
+[MIT](LICENSE)

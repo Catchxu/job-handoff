@@ -112,13 +112,13 @@ fi
 | 连续 30 分钟连不上计算服务器，以及恢复连接时 | `bert-ft: cannot reach lab` |
 | 交接结束 | `bert-ft on lab: COMPLETED after 2 attempt(s)`，附每一轮的结果，以及 agent 报告的开头或日志最后几行 |
 
-配置方法：手机装 [ntfy](https://ntfy.sh)，订阅一个足够长的随机主题名，再在 `~/.job-handoff/config` 里加一行：
+配置方法：手机装 [ntfy](https://ntfy.sh)，订阅一个足够长的随机主题名，再把它写进 `~/.job-handoff/config`：
 
 ```bash
-NOTIFY_CMD='curl -fsS -o /dev/null --data-binary @- -K <(printf "url = https://ntfy.sh/jh-your-long-random-topic\nheader = \"Title: %s\"\n" "$1")'
+NTFY_TOPIC='jh-paste-your-own-random-topic'    # 生成方法：echo "jh-$(openssl rand -hex 10)"
 ```
 
-也可以直接让 agent 帮你配置手机通知。Bark 和飞书也能用，
+然后用 `handoff notify-test lab` 发一条测试消息。也可以直接让 agent 帮你配置手机通知。Bark 和飞书也能用，
 见[配置说明](skills/job-handoff/references/configuration.md#phone-notifications)（英文）。
 
 ### 守望脚本跑在哪里
@@ -150,7 +150,7 @@ git clone https://github.com/Catchxu/job-handoff.git
 | 你说 | agent 做的事 |
 |---|---|
 | “帮我给服务器 `lab` 配置 job-handoff” | 询问服务器、中转机、通知方式和是否开第二层，写好配置，运行 `handoff doctor` 检查。 |
-| “帮我配置手机通知” | 生成一个私密的 ntfy 主题名给你订阅，写好命令，发一条测试消息。 |
+| “帮我配置手机通知” | 生成一个私密的 ntfy 主题名给你订阅，保存好，发一条测试消息。 |
 | “在 `lab` 上开始训练” | 用 `handoff launch` 启动，任务不会随会话断掉。 |
 | “我要走了” | 写交接说明，拟一份预案给你确认，运行 `handoff leave`，并告诉你离开期间会发生什么、不会发生什么。 |
 | “我回来了” | 运行 `handoff back`，读报告，收回结果，接着干活。 |

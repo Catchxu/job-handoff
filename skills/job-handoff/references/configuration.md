@@ -22,7 +22,10 @@ Created by `handoff init`. It is a bash file.
 | `POLL_SECONDS` | `60` | How often the watcher checks the job. |
 | `MAX_ATTEMPTS` | `3` | Runs per handoff: the first one plus follow-ups from the playbook or the agent. |
 | `LOG_TAIL` | `200` | Log lines kept for the report and the wake brief. |
-| `NOTIFY_CMD` | empty | Command run on the watch host to push a status message: `$1` is the title, the details arrive on stdin. See [Phone notifications](#phone-notifications). |
+| `NTFY_TOPIC` | empty | ntfy topic for phone notifications. See [Phone notifications](#phone-notifications). |
+| `NTFY_SERVER` | `https://ntfy.sh` | ntfy server, for a self-hosted one. |
+| `NTFY_TOKEN` | empty | ntfy access token, for a protected topic. |
+| `NOTIFY_CMD` | empty | Command for any other push service, run on the watch host: `$1` is the title, the details arrive on stdin. |
 | `WAKE_MODE` | `report` | Layer 2 mode: `report` or `act`. |
 | `WAKE_CMD` | empty | Layer 2 command, run on the watch host with the brief on stdin. Empty means Layer 2 cannot be used. |
 
@@ -41,16 +44,21 @@ phone shows status, it cannot send anything back.
 | The compute host has been unreachable for 30 minutes, and when it is reachable again | `NAME: cannot reach HOST` | What the watcher is doing |
 | The handoff ends | `NAME on HOST: STATE after N attempt(s)` | Every attempt with its exit code, then the start of the agent's report (Layer 2) or the last 10 log lines |
 
-`$1` is one line of ASCII text. The details, a few lines of UTF-8 text and at
-most 3500 bytes, arrive on stdin (and in `$2`, for older commands).
-
-A topic on a public service works like a password. Generate a long random one:
-`openssl rand -hex 10`.
+**ntfy** is built in. Install the app, subscribe to a topic, and set it in
+the configuration; `handoff` makes the call itself:
 
 ```bash
-# ntfy (app for iOS and Android)
-NOTIFY_CMD='curl -fsS -o /dev/null --data-binary @- -K <(printf "url = https://ntfy.sh/jh-your-long-random-topic\nheader = \"Title: %s\"\n" "$1")'
+NTFY_TOPIC='jh-paste-your-own-random-topic'    # from: echo "jh-$(openssl rand -hex 10)"
+```
 
+Anyone who knows a topic on ntfy.sh can read its messages, so the topic must be
+long and random. For more protection, use a reserved topic with an access token
+(`NTFY_TOKEN`) or your own server (`NTFY_SERVER`).
+
+**Other services** go through `NOTIFY_CMD`. `$1` is one line of ASCII text; the
+details, a few lines of UTF-8 text and at most 3500 bytes, arrive on stdin.
+
+```bash
 # Bark (iOS)
 NOTIFY_CMD='curl -fsS -o /dev/null --data-urlencode "title=$1" --data-urlencode "body@-" -K <(echo "url = https://api.day.app/YOUR_DEVICE_KEY")'
 
@@ -59,12 +67,12 @@ NOTIFY_CMD='python3 -c "import json,sys; print(json.dumps({\"msg_type\": \"text\
 ```
 
 Keep these forms. Any user of a shared host can read the arguments of every
-running process (`ps`). Here the URL with the topic, key or token reaches curl
+running process (`ps`). Here the URL with the key or token reaches curl
 through `-K <(...)`, and the details through stdin, so neither appears there.
+The built-in ntfy call works the same way.
 
-The watch host must be able to reach the service. Test the command once from
-the watch host before the first handoff:
-`ssh <watch host> 'curl -fsS -H "Title: test" -d "hello" https://ntfy.sh/<topic>'`.
+The watch host must be able to reach the service. Send a test message from it
+before the first handoff: `handoff notify-test <alias>`.
 
 ## Host profiles: `handoff host add`
 

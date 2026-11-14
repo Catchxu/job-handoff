@@ -116,13 +116,14 @@ They are one-way: you read them, and nothing can be sent back to your servers.
 | The handoff ends | `bert-ft on lab: COMPLETED after 2 attempt(s)`, with every attempt and the start of the agent's report, or the last log lines |
 
 To set it up, install the [ntfy](https://ntfy.sh) app, subscribe to a long
-random topic, and add one line to `~/.job-handoff/config`:
+random topic, and set it in `~/.job-handoff/config`:
 
 ```bash
-NOTIFY_CMD='curl -fsS -o /dev/null --data-binary @- -K <(printf "url = https://ntfy.sh/jh-your-long-random-topic\nheader = \"Title: %s\"\n" "$1")'
+NTFY_TOPIC='jh-paste-your-own-random-topic'    # from: echo "jh-$(openssl rand -hex 10)"
 ```
 
-Or ask your agent to set up phone notifications. Bark and Feishu work too:
+Then send a test message with `handoff notify-test lab`. Or ask your agent to
+set up phone notifications. Bark and Feishu work too:
 see the [configuration reference](skills/job-handoff/references/configuration.md#phone-notifications).
 
 ### Where the watcher runs
@@ -155,7 +156,7 @@ the remote hosts, which Linux has by default.
 | You say | The agent does |
 |---|---|
 | “Set up job-handoff for my server `lab`” | Asks about hosts, relay, notification and Layer 2, writes the configuration, runs `handoff doctor`. |
-| “Set up phone notifications” | Generates a private ntfy topic for you to subscribe to, writes the command, sends a test message. |
+| “Set up phone notifications” | Generates a private ntfy topic for you to subscribe to, saves it, sends a test message. |
 | “Start the training on `lab`” | Starts it with `handoff launch`, so it survives the session. |
 | “I have to go” | Writes the handoff notes, proposes a playbook for your approval, runs `handoff leave`, and tells you what will and will not happen while you are away. |
 | “I’m back” | Runs `handoff back`, reads the report, collects the results, and continues the work. |

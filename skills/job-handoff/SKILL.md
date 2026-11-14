@@ -56,10 +56,12 @@ the user only what you cannot find out yourself:
 2. **Relay**: needed only when the watcher cannot live on the compute host (the
    site forbids long-running processes on the login node) or when Layer 2 is
    wanted and the compute host cannot run the agent. Otherwise no relay.
-3. **Phone notifications**: none, or a push service (ntfy, Bark, a webhook). They
-   are one-way status messages: a queued job starts, a follow-up run starts, the
-   compute host is unreachable, the handoff ends with its result. For ntfy,
-   generate the random topic yourself and give it to the user to subscribe to.
+3. **Phone notifications**: none, ntfy (built in), or another push service.
+   They are one-way status messages: a queued job starts, a follow-up run
+   starts, the compute host is unreachable, the handoff ends with its result.
+   For ntfy, generate the topic yourself (`echo "jh-$(openssl rand -hex 10)"`),
+   set `NTFY_TOPIC`, give the topic to the user to subscribe to in the app, and
+   run `handoff notify-test <alias>` once they have.
 4. **Layer 2**: off, `report`, or `act`, and with which agent. Show the Layer 2
    warnings before the user answers.
 
@@ -71,9 +73,10 @@ handoff host add <alias> [--relay <alias>]    # one per compute host
 handoff doctor                                # every line must say ok
 ```
 
-Edit `~/.job-handoff/config` for the notification and wake commands, in the
-forms given in the reference: they keep topics, tokens, log lines and the brief
-out of process lists, which every user of a shared host can read. All keys,
+Edit `~/.job-handoff/config` for notifications and the wake command. Prefer the
+built-in ntfy setting; write `NOTIFY_CMD` and `WAKE_CMD` only in the forms given
+in the reference, which keep tokens, log lines and the brief out of process
+lists that every user of a shared host can read. All keys,
 the relay setup, hosts that need a custom transfer command, clusters with
 two-factor login, and ready-made wake commands for Claude Code and Codex are in
 `references/configuration.md`. Read it before writing the config.

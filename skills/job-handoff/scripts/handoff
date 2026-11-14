@@ -58,7 +58,8 @@ rsh_detach() {
 
 load_config() {
   POLL_SECONDS=60; MAX_ATTEMPTS=3; LOG_TAIL=200
-  NOTIFY_CMD=; WAKE_MODE=report; WAKE_CMD=
+  NTFY_TOPIC=; NTFY_SERVER=https://ntfy.sh; NTFY_TOKEN=; NOTIFY_CMD=
+  WAKE_MODE=report; WAKE_CMD=
   if [ -f "$ROOT/config" ]; then . "$ROOT/config"; fi
 }
 
@@ -104,6 +105,7 @@ Setup
                          [--relay-compute ALIAS] [--fetch-cmd CMD] [--relay-fetch-cmd CMD]
   handoff host list
   handoff doctor [ALIAS]               verify logins, tools, relay and wake command
+  handoff notify-test ALIAS            send a test notification from ALIAS's watch host
 
 Jobs
   handoff launch --host ALIAS --name NAME --dir DIR [--plain] (--cmd 'SHELL' | -- ARGS...)
@@ -136,8 +138,16 @@ POLL_SECONDS=60     # how often the watcher checks the job
 MAX_ATTEMPTS=3      # runs per handoff: the first one plus follow-ups
 LOG_TAIL=200        # log lines kept for the report and the wake brief
 
-# Phone status, run on the watch host: $1 is the title, the details are on stdin.
-# NOTIFY_CMD='curl -fsS -o /dev/null --data-binary @- -K <(printf "url = https://ntfy.sh/jh-your-long-random-topic\nheader = \"Title: %s\"\n" "$1")'
+# Phone status through ntfy (https://ntfy.sh): subscribe to NTFY_TOPIC in the
+# app. Anyone who knows the topic can read the messages, so make it long and
+# random: openssl rand -hex 10
+NTFY_TOPIC=''
+NTFY_SERVER=https://ntfy.sh
+NTFY_TOKEN=''       # access token, only for a protected topic
+
+# Any other push service: a command run on the watch host. $1 is the title and
+# the details arrive on stdin. Keep tokens and details out of its arguments;
+# see references/configuration.md.
 NOTIFY_CMD=''
 
 # Layer 2: wake an agent when a handoff ends. Read the warnings first.
@@ -215,11 +225,26 @@ cmd_doctor() {
       check "$RELAY: nohup, setsid, rsync" probe "$RELAY" 'command -v nohup && command -v setsid && command -v rsync'
       check "$RELAY -> $RELAY_COMPUTE: login without a prompt" probe "$RELAY" "ssh -o BatchMode=yes -o LogLevel=ERROR -o ConnectTimeout=20 $RELAY_COMPUTE true"
     fi
+    if [ -n "$NTFY_TOPIC" ]; then
+      check "$watch: curl, for ntfy notifications" probe "$watch" 'command -v curl'
+    fi
     if [ -n "$WAKE_CMD" ]; then
       echo "note  $watch: the wake command is not run by doctor; test it once by hand (see references/configuration.md)"
     fi
   done
   return "$bad"
+}
+
+cmd_notify_test() {
+  local alias=${1:?usage: handoff notify-test ALIAS}
+  load_config; load_host "$alias"
+  [ -n "$NTFY_TOPIC$NOTIFY_CMD" ] || die "no notification set up: set NTFY_TOPIC or NOTIFY_CMD in $ROOT/config"
+  local WATCH=${RELAY:-$alias} tmp
+  install_remote "$WATCH"
+  tmp=$(mktemp)
+  save "$tmp" NTFY_TOPIC NTFY_SERVER NTFY_TOKEN NOTIFY_CMD
+  rsh "$WATCH" _notify_test < "$tmp"
+  rm "$tmp"
 }
 
 cmd_launch() {
@@ -357,7 +382,7 @@ cmd_leave() {
   else
     rsh "$HOST" _job_playbook_set "$ID" </dev/null
   fi
-  save "$L/watch.conf" ID NAME HOST VIA DIR POLL_SECONDS MAX_ATTEMPTS LOG_TAIL NOTIFY_CMD WAKE WAKE_MODE WAKE_CMD FETCH FETCH_TEMPLATE
+  save "$L/watch.conf" ID NAME HOST VIA DIR POLL_SECONDS MAX_ATTEMPTS LOG_TAIL NTFY_TOPIC NTFY_SERVER NTFY_TOKEN NOTIFY_CMD WAKE WAKE_MODE WAKE_CMD FETCH FETCH_TEMPLATE
   tar -C "$L" -cf - watch.conf notes.md | rsh_detach "$WATCH" _watch_start "$ID"
   local phase
   phase=$(rsh "$WATCH" _watch_phase "$ID" </dev/null)
@@ -365,7 +390,7 @@ cmd_leave() {
   save "$L/job.conf" ID NAME HOST SCHED KIND DIR CREATED FETCH INTO
   echo away > "$L/phase"
   echo "$ID is watched on $WATCH (every ${POLL_SECONDS}s, up to $MAX_ATTEMPTS attempts)."
-  echo "playbook: ${playbook:-none}   wake: $([ "$WAKE" = 1 ] && echo "$WAKE_MODE" || echo off)   notify: $([ -n "$NOTIFY_CMD" ] && echo on || echo off)"
+  echo "playbook: ${playbook:-none}   wake: $([ "$WAKE" = 1 ] && echo "$WAKE_MODE" || echo off)   notify: $([ -n "$NTFY_TOPIC$NOTIFY_CMD" ] && echo on || echo off)"
   echo "You can close the laptop. On return: handoff back $ID"
 }
 
@@ -692,6 +717,18 @@ EOF
   fi
 }
 
+# Stdin: the notification settings. Sends one test message from this host.
+cmd__notify_test() {
+  J=$ROOT/notify-test
+  mkdir -p "$J"; cd "$J"
+  cat > settings; . ./settings
+  : > watch.log
+  notify "job-handoff test from $(hostname)" "If you can read this, notifications from this host work."
+  if [ -s watch.log ]; then cat watch.log; cd "$ROOT"; rm -r "$J"; exit 1; fi
+  echo "sent from $(hostname)"
+  cd "$ROOT"; rm -r "$J"
+}
+
 cmd__watch_start() {
   local id=$1
   J=$ROOT/jobs/$id; mkdir -p "$J"
@@ -719,10 +756,23 @@ cmd__watch_phase() {
 # go to its stdin, so neither the topic nor log lines show up in `ps` on a
 # shared host. "$2" holds the details too, for older commands.
 notify() {
-  [ -n "$NOTIFY_CMD" ] || return 0
+  [ -n "$NTFY_TOPIC$NOTIFY_CMD" ] || return 0
   local details
   details=$(printf '%s\n' "$2" | head -c 3500 | iconv -f UTF-8 -t UTF-8 -c)
-  ( set -- "$1" "$details"; eval "$NOTIFY_CMD" ) <<<"$details" >> watch.log 2>&1 || watch_log "notification failed"
+  if [ -n "$NTFY_TOPIC" ]; then
+    curl -fsS -o /dev/null --data-binary @- -K <(ntfy_curl_config "$1") <<<"$details" >> watch.log 2>&1 \
+      || watch_log "ntfy notification failed"
+  fi
+  if [ -n "$NOTIFY_CMD" ]; then
+    ( set -- "$1" "$details"; eval "$NOTIFY_CMD" ) <<<"$details" >> watch.log 2>&1 || watch_log "notification failed"
+  fi
+}
+
+# curl settings for ntfy, read through -K so that the topic and the token do
+# not appear among the process arguments.
+ntfy_curl_config() {
+  printf 'url = "%s/%s"\nheader = "Title: %s"\n' "${NTFY_SERVER%/}" "$NTFY_TOPIC" "$1"
+  if [ -n "$NTFY_TOKEN" ]; then printf 'header = "Authorization: Bearer %s"\n' "$NTFY_TOKEN"; fi
 }
 
 # log_excerpt ATTEMPT LINES : the end of an attempt's log, short enough for a phone
@@ -887,8 +937,9 @@ cmd=${1:-help}; shift || true
 case $cmd in
   help|-h|--help) cmd_help ;;
   version|--version) echo "handoff $VERSION" ;;
+  notify-test) cmd_notify_test "$@" ;;
   init|host|doctor|launch|adopt|status|logs|wait|kill|list|notes|leave|back|fetch) "cmd_$cmd" "$@" ;;
   _job_new|_job_adopt|_job_state|_job_show|_job_tail|_job_kill|_job_playbook_set|_job_playbook|_job_setnext|_job_advance) "cmd_$cmd" "$@" ;;
-  _watch_start|_watch_stop|_watch_phase|_watch|_watch_report) "cmd_$cmd" "$@" ;;
+  _watch_start|_watch_stop|_watch_phase|_watch|_watch_report|_notify_test) "cmd_$cmd" "$@" ;;
   *) die "unknown command '$cmd'. See: handoff help" ;;
 esac

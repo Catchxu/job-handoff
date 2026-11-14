@@ -149,21 +149,21 @@ def flow(lang, theme):
         return (f'<path d="M{x1} {y}H{x2}" stroke="{c[color]}" stroke-width="1.8" fill="none"'
                 f'{dash}{start} marker-end="url(#a-{color})"/>')
 
-    def card(cx, cy, label, color="line", w=230, h=40, dot=None):
+    def card(cx, cy, label, color="line", w=230, h=42, dot=None):
         out = (f'<rect x="{cx - w / 2}" y="{cy - h / 2}" width="{w}" height="{h}" rx="10" '
                f'fill="{c["card"]}" stroke="{c[color]}" stroke-width="1.5"/>')
         tx = cx
         if dot:
-            lw = width_of(label, 14.5)
+            lw = width_of(label, 15.5)
             out += f'<circle cx="{cx - lw / 2 - 4}" cy="{cy}" r="4.5" fill="{c[dot]}"/>'
             tx = cx + 7
-        return out + text(tx, cy + 5, label, 14.5, c["fg"], 600)
+        return out + text(tx, cy + 5.4, label, 15.5, c["fg"], 600)
 
     def chip(cx, cy, label):
-        w = len(label) * 13.5 * 0.61 + 20
-        return (f'<rect x="{cx - w / 2:.0f}" y="{cy - 13}" width="{w:.0f}" height="26" rx="6" '
+        w = len(label) * 14.5 * 0.61 + 20
+        return (f'<rect x="{cx - w / 2:.0f}" y="{cy - 14}" width="{w:.0f}" height="28" rx="6" '
                 f'fill="{c["chip"]}" stroke="{c["line"]}"/>'
-                + text(cx, cy + 4.6, label, 13.5, c["fg"], 600, font=MONO))
+                + text(cx, cy + 5, label, 14.5, c["fg"], 600, font=MONO))
 
     def band(y1, y2, color):
         return (f'<rect x="345" y="{y1}" width="635" height="{y2 - y1}" rx="14" fill="{c[color]}" '
@@ -185,55 +185,55 @@ def flow(lang, theme):
     for x, (title, sub), ic in zip(X, t["lanes"], ("laptop", "eye", "server")):
         b.append(f'<rect x="{x - 150}" y="18" width="300" height="78" rx="14" fill="{c["card"]}" '
                  f'stroke="{c["line"]}" stroke-width="1.5"/>')
-        tw = max(width_of(title, 17), width_of(sub, 13))
+        tw = max(width_of(title, 18), width_of(sub, 14))
         left = x - (tw + 40) / 2
         b.append(icon(ic, left, 43, c["blue"], 28))
-        b.append(text(left + 40, 53, title, 17, c["fg"], 700, "start"))
-        b.append(text(left + 40, 74, sub, 13, c["muted"], 400, "start"))
+        b.append(text(left + 40, 53, title, 18, c["fg"], 700, "start"))
+        b.append(text(left + 40, 75, sub, 14, c["muted"], 400, "start"))
 
     mid = (X[0] + X[1]) / 2
     chip_x = X[0] + 112
 
     # 1. launch
     b.append(arrow(X[0], X[2] - 119, 140))
-    b.append(chip(chip_x, 140 - 20, "handoff launch"))
+    b.append(chip(chip_x, 140 - 22, "handoff launch"))
     b.append(card(X[2], 140, t["job_start"], dot="green"))
 
     # 2. leave
     b.append(arrow(X[0], X[1] - 119, 206))
-    b.append(chip(chip_x, 206 - 20, "handoff leave"))
+    b.append(chip(chip_x, 206 - 22, "handoff leave"))
     b.append(card(X[1], 206, t["watcher"]))
 
     # laptop closed
     b.append(f'<rect x="55" y="244" width="220" height="286" rx="14" fill="{c["muted"]}" fill-opacity="{c["soft"]}" '
              f'stroke="{c["life"]}" stroke-width="1.5" stroke-dasharray="6 6"/>')
     b.append(icon("moon", X[0] - 17, 334, c["muted"], 34, 1.6))
-    b.append(text(X[0], 398, t["closed"], 16, c["fg"], 700))
-    b.append(text(X[0], 420, t["closed_sub"], 13, c["muted"]))
+    b.append(text(X[0], 398, t["closed"], 17, c["fg"], 700))
+    b.append(text(X[0], 421, t["closed_sub"], 14, c["muted"]))
 
     # layer 1
     gap = (X[1] + X[2]) / 2
     b.append(arrow(X[1] + 6, X[2] - 6, 312, "blue", dashed=True, both=True))
-    b.append(text(gap, 312 - 11, t["follow"], 14, c["fg"], 500))
+    b.append(text(gap, 312 - 11, t["follow"], 15, c["fg"], 500))
     b.append(arrow(X[1] + 6, X[2] - 119, 378, "blue"))
-    b.append(text((X[1] + X[2] - 115) / 2, 378 - 11, t["playbook"], 14, c["fg"], 500))
+    b.append(text((X[1] + X[2] - 115) / 2, 378 - 11, t["playbook"], 15, c["fg"], 500))
     b.append(card(X[2], 378, t["followup"], "blue"))
     for y in (312, 378):
         b.append(f'<circle cx="{X[1]}" cy="{y}" r="4.5" fill="{c["blue"]}"/>')
     b.append(f'<circle cx="{X[2]}" cy="312" r="4.5" fill="{c["blue"]}"/>')
 
     # layer 2
-    b.append(card(X[1], 492, t["wake"], "purple", w=236))
-    b.append(arrow(X[1] + 124, X[2] - 6, 492, "purple", dashed=True))
-    b.append(text((X[1] + 124 + X[2]) / 2, 492 - 12, t["act"], 13, c["muted"], 500))
+    b.append(card(X[1], 492, t["wake"], "purple", w=254))
+    b.append(arrow(X[1] + 133, X[2] - 6, 492, "purple", dashed=True))
+    b.append(text((X[1] + 133 + X[2]) / 2, 492 - 12, t["act"], 13.5, c["muted"], 500))
     b.append(f'<circle cx="{X[2]}" cy="492" r="4.5" fill="{c["purple"]}"/>')
 
     # back
     b.append(arrow(X[0], X[1] - 119, 582))
-    b.append(chip(chip_x, 582 - 20, "handoff back"))
+    b.append(chip(chip_x, 582 - 22, "handoff back"))
     b.append(card(X[1], 582, t["back"], dot="green"))
     b.append(arrow(X[1] - 6, X[0] + 6, 630, "muted", dashed=True))
-    b.append(text(mid, 630 - 11, t["takeover"], 14, c["muted"], 500))
+    b.append(text(mid, 630 - 11, t["takeover"], 15, c["muted"], 500))
     for y in (140, 206, 582):
         b.append(f'<circle cx="{X[0]}" cy="{y}" r="4.5" fill="{c["fg"]}"/>')
     return svg(W, H, b)
@@ -256,13 +256,13 @@ def layers(lang, theme):
                  f'stroke="{c[color]}" stroke-width="1.2"/>')
         b.append(text(x + w - 28 - bw / 2, 56.4, layer["badge"], 12.5, c[color], 600))
         b.append(text(x + 28, 104, layer["title"], 27, c["fg"], 700, "start"))
-        b.append(text(x + 28, 131, layer["sub"], 14.5, c["muted"], 400, "start"))
+        b.append(text(x + 28, 132, layer["sub"], 15.5, c["muted"], 400, "start"))
         b.append(f'<path d="M{x + 28} 152H{x + w - 28}" stroke="{c[color]}" stroke-opacity="0.3"/>')
         for k, row in enumerate(layer["rows"]):
             y = 184 + k * 33
             b.append(icon("check", x + 28, y - 16, c[color], 20, 2.4))
-            b.append(text(x + 58, y, row, 15, c["fg"], 500, "start"))
-        b.append(text(x + 28, H - 38, layer["needs"], 13, c["muted"], 500, "start"))
+            b.append(text(x + 58, y, row, 16, c["fg"], 500, "start"))
+        b.append(text(x + 28, H - 38, layer["needs"], 14, c["muted"], 500, "start"))
     # plus sign between the cards
     cx, cy = W / 2, H / 2
     b.append(f'<circle cx="{cx}" cy="{cy}" r="17" fill="{c["card"]}" stroke="{c["line"]}" stroke-width="1.5"/>')

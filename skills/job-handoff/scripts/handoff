@@ -621,6 +621,16 @@ compute_retry() {
 
 watch_log() { echo "$(now) $*" >> "$J/watch.log"; }
 
+# Print the saved log tail of every attempt, oldest first.
+attempt_logs() {
+  local i=1
+  while [ -f "$J/log.$i.tail" ]; do
+    echo "--- attempt $i ---"
+    cat "$J/log.$i.tail"
+    i=$((i + 1))
+  done
+}
+
 write_brief() {
   local where="ssh $VIA '<command>'"
   [ -n "$VIA" ] || where="commands run directly on this machine"
@@ -645,9 +655,9 @@ $(cat "$J/attempts")
 
 Attempt cap: $MAX_ATTEMPTS.
 
-## Last $LOG_TAIL log lines of the latest attempt
+## Last $LOG_TAIL log lines of each attempt
 
-$(cat "$J/log.tail")
+$(attempt_logs)
 
 ## Playbook output
 
@@ -729,7 +739,7 @@ cmd__watch() {
     echo post > watch.phase
     echo "$n $st $code $raw $(now)" >> attempts
     watch_log "attempt $n ended: $st (exit $code)"
-    compute_retry _job_tail "$id" "$LOG_TAIL" </dev/null > log.tail 2>&1
+    compute_retry _job_tail "$id" "$LOG_TAIL" </dev/null > "log.$n.tail" 2>&1
     {
       echo "== after attempt $n: $st (exit $code) =="
       compute_retry _job_playbook "$id" "$st" "$code" </dev/null
@@ -798,11 +808,15 @@ cmd__watch_report() {
     echo; echo "-- attempts (number, state, exit code, scheduler state, end time) --"
     cat "$J/attempts"
   fi
-  for f in playbook.out wake_report.md log.tail; do
+  for f in playbook.out wake_report.md; do
     [ -s "$J/$f" ] || continue
     echo; echo "-- $f --"
     cat "$J/$f"
   done
+  if [ -f "$J/log.1.tail" ]; then
+    echo; echo "-- last log lines of each attempt --"
+    attempt_logs
+  fi
   echo; echo "-- watcher log --"
   tail -n 15 "$J/watch.log"
 }

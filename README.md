@@ -140,7 +140,7 @@ Version 0.1.0.
 | Plain SSH host: launch, leave, playbook follow-ups, return, fetch | On real servers, one of them behind a bastion |
 | SLURM: launch, playbook follow-up, cancel, adopt, return, fetch | On a real cluster (SLURM 25.11) |
 | Layer 2 `report` mode | With real Claude Code and real Codex |
-| Relay | In a simulation only |
+| Relay: watcher on a separate server, compute host behind a bastion, with Layer 2 `report` | On real servers |
 | Layer 2 `act` mode | In a simulation only, not yet with a real agent |
 | macOS as the local machine | Not tested |
 

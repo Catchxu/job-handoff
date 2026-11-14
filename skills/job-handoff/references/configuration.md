@@ -22,27 +22,45 @@ Created by `handoff init`. It is a bash file.
 | `POLL_SECONDS` | `60` | How often the watcher checks the job. |
 | `MAX_ATTEMPTS` | `3` | Runs per handoff: the first one plus follow-ups from the playbook or the agent. |
 | `LOG_TAIL` | `200` | Log lines kept for the report and the wake brief. |
-| `NOTIFY_CMD` | empty | Command run on the watch host when a handoff ends. `$1` is a one-line message. |
+| `NOTIFY_CMD` | empty | Command run on the watch host to push a status message: `$1` is the title, `$2` the details. See [Phone notifications](#phone-notifications). |
 | `WAKE_MODE` | `report` | Layer 2 mode: `report` or `act`. |
 | `WAKE_CMD` | empty | Layer 2 command, run on the watch host. Empty means Layer 2 cannot be used. |
 
 Settings are copied to the watch host at `handoff leave`; a change applies to
 the next handoff.
 
-### Notification commands
+### Phone notifications
+
+The watch host runs `NOTIFY_CMD` at these moments. Messages are one-way: the
+phone shows status, it cannot send anything back.
+
+| When | Title (`$1`) | Details (`$2`) |
+|---|---|---|
+| A queued job leaves the queue | `NAME: attempt N is running on HOST` | Approximate time in the queue since the handoff |
+| An attempt ends and a follow-up starts | `NAME: attempt N FAILED, the playbook started attempt N+1` | Last 8 log lines of the attempt that ended, or the start of the agent's report when the agent started it |
+| The compute host has been unreachable for 30 minutes, and when it is reachable again | `NAME: cannot reach HOST` | What the watcher is doing |
+| The handoff ends | `NAME on HOST: STATE after N attempt(s)` | Every attempt with its exit code, then the start of the agent's report (Layer 2) or the last 10 log lines |
+
+`$1` is one line of ASCII text. `$2` is a few lines of UTF-8 text, at most
+3500 bytes.
+
+A topic on a public service works like a password. Generate a long random one:
+`openssl rand -hex 10`.
 
 ```bash
-# ntfy (use a long random topic; anyone who knows it can read the messages)
-NOTIFY_CMD='curl -fsS -d "$1" https://ntfy.sh/your-long-random-topic'
+# ntfy (app for iOS and Android)
+NOTIFY_CMD='curl -fsS -o /dev/null -H "Title: $1" -d "$2" https://ntfy.sh/jh-your-long-random-topic'
 
 # Bark (iOS)
-NOTIFY_CMD='curl -fsS https://api.day.app/push -H "Content-Type: application/json" -d "{\"device_key\":\"YOUR_KEY\",\"body\":\"$1\"}"'
+NOTIFY_CMD='curl -fsS -o /dev/null --data-urlencode "title=$1" --data-urlencode "body=$2" https://api.day.app/YOUR_DEVICE_KEY'
 
-# Feishu / Lark bot webhook
-NOTIFY_CMD='curl -fsS -H "Content-Type: application/json" -d "{\"msg_type\":\"text\",\"content\":{\"text\":\"$1\"}}" https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_TOKEN'
+# Feishu / Lark bot webhook (needs python3 on the watch host)
+NOTIFY_CMD='python3 -c "import json,sys; print(json.dumps({\"msg_type\": \"text\", \"content\": {\"text\": sys.argv[1] + \"\n\" + sys.argv[2]}}))" "$1" "$2" | curl -fsS -o /dev/null -H "Content-Type: application/json" -d @- https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_TOKEN'
 ```
 
-The watch host must be able to reach the service.
+The watch host must be able to reach the service. Test the command once from
+the watch host before the first handoff:
+`ssh <watch host> 'curl -fsS -H "Title: test" -d "hello" https://ntfy.sh/<topic>'`.
 
 ## Host profiles: `handoff host add`
 

@@ -56,7 +56,10 @@ the user only what you cannot find out yourself:
 2. **Relay**: needed only when the watcher cannot live on the compute host (the
    site forbids long-running processes on the login node) or when Layer 2 is
    wanted and the compute host cannot run the agent. Otherwise no relay.
-3. **Notification** when a handoff ends: none, or a command (ntfy, Bark, a webhook).
+3. **Phone notifications**: none, or a push service (ntfy, Bark, a webhook). They
+   are one-way status messages: a queued job starts, a follow-up run starts, the
+   compute host is unreachable, the handoff ends with its result. For ntfy,
+   generate the random topic yourself and give it to the user to subscribe to.
 4. **Layer 2**: off, `report`, or `act`, and with which agent. Show the Layer 2
    warnings before the user answers.
 
@@ -124,7 +127,8 @@ While the user is present, follow a job with `handoff status <id>` or run
    for this handoff.
 4. Tell the user, in one short message: which layer is active, what will happen
    on success and on failure, what will not happen (in Layer 1 nothing thinks:
-   an unforeseen failure waits for them), and that they can close the laptop.
+   an unforeseen failure waits for them), whether their phone will get status
+   messages, and that they can close the laptop.
 
 ## When the user returns
 
@@ -161,8 +165,9 @@ Show the user the ones that apply, before the first use of each feature.
   account.
 - Results prefetched to a relay are stored on it. Do not prefetch data that
   must not leave the compute site.
-- Messages sent to public notification services are readable by anyone who
-  knows the topic. They contain the job name and host alias.
+- Notifications carry the job name, the host alias, log lines and the start of
+  the agent's report. On a public service such as ntfy.sh, anyone who knows the
+  topic can read them. Use a long random topic.
 - Nothing thinks in Layer 1. A failure the playbook did not foresee waits until
   the user returns.
 

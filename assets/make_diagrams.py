@@ -28,6 +28,8 @@ TEXT = {
         watcher="Watcher starts",
         closed="Laptop closed",
         closed_sub="nothing runs here",
+        phone="Status on your phone",
+        phone_sub="one-way, read only",
         l1_tag="LAYER 1 · HANDOFF",
         follow="follows the job until it ends",
         playbook="runs your playbook",
@@ -62,6 +64,8 @@ TEXT = {
         watcher="守望脚本启动",
         closed="电脑合上",
         closed_sub="这里什么都不运行",
+        phone="手机收到状态",
+        phone_sub="单向推送，只读",
         l1_tag="第一层 · 交接",
         follow="跟踪任务直到结束",
         playbook="执行你的预案",
@@ -96,6 +100,7 @@ ICONS = {
     "server": '<rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/>',
     "moon": '<path d="M20.5 14.2A8.5 8.5 0 1 1 9.8 3.5a6.8 6.8 0 0 0 10.7 10.7z"/>',
     "check": '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+    "phone": '<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M11 18.5h2"/>',
 }
 
 
@@ -147,7 +152,7 @@ def flow(lang):
         f'<marker id="a-{k}" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" '
         f'orient="auto-start-reverse"><path d="M1 1.5L8.5 5L1 8.5" fill="none" stroke="{c[k]}" '
         f'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker>'
-        for k in ("fg", "muted", "blue", "purple")) + "</defs>"]
+        for k in ("fg", "muted", "blue", "purple", "green")) + "</defs>"]
 
     def arrow(x1, x2, y, color="fg", dashed=False, both=False):
         dash = ' stroke-dasharray="5 5"' if dashed else ""
@@ -213,9 +218,18 @@ def flow(lang):
     # laptop closed
     b.append(f'<rect x="55" y="244" width="220" height="286" rx="14" fill="{c["muted"]}" fill-opacity="{c["soft"]}" '
              f'stroke="{c["life"]}" stroke-width="1.5" stroke-dasharray="6 6"/>')
-    b.append(icon("moon", X[0] - 17, 334, c["muted"], 34, 1.6))
-    b.append(text(X[0], 398, t["closed"], 17, c["fg"], 700))
-    b.append(text(X[0], 421, t["closed_sub"], 14, c["muted"]))
+    b.append(icon("moon", X[0] - 15, 278, c["muted"], 30, 1.6))
+    b.append(text(X[0], 334, t["closed"], 17, c["fg"], 700))
+    b.append(text(X[0], 356, t["closed_sub"], 14, c["muted"]))
+    # phone: status pushed from the watch host
+    b.append(f'<rect x="73" y="398" width="184" height="112" rx="12" fill="{c["card"]}" '
+             f'stroke="{c["green"]}" stroke-width="1.5"/>')
+    b.append(icon("phone", X[0] - 13, 410, c["green"], 26, 1.8))
+    b.append(text(X[0], 462, t["phone"], 15, c["fg"], 700))
+    b.append(text(X[0], 484, t["phone_sub"], 13, c["muted"]))
+    b.append(f'<path d="M{X[1]} 426H263" stroke="{c["green"]}" stroke-width="1.8" fill="none" '
+             f'stroke-dasharray="5 5" marker-end="url(#a-green)"/>')
+    b.append(f'<circle cx="{X[1]}" cy="426" r="4.5" fill="{c["green"]}"/>')
 
     # layer 1
     gap = (X[1] + X[2]) / 2

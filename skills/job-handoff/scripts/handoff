@@ -665,6 +665,9 @@ $(cat "$J/playbook.out" 2>/dev/null)
 
 ## Your task
 
+Begin your answer with a summary of at most three plain sentences, without a
+heading. It is pushed to the owner's phone, where only the start is shown.
+
 EOF
   if [ "$WAKE_MODE" = act ]; then
     cat <<EOF
@@ -707,59 +710,105 @@ cmd__watch_phase() {
   if [ -f "$J/watch.phase" ]; then cat "$J/watch.phase"; else echo none; fi
 }
 
+# notify TITLE DETAILS : run NOTIFY_CMD on this host. The title is one line;
+# the details are a few lines, kept under the 4 KB that push services accept.
+notify() {
+  [ -n "$NOTIFY_CMD" ] || return 0
+  local details
+  details=$(printf '%s\n' "$2" | head -c 3500 | iconv -f UTF-8 -t UTF-8 -c)
+  bash -c "$NOTIFY_CMD" _ "$1" "$details" </dev/null >> watch.log 2>&1 || watch_log "notification failed"
+}
+
+# log_excerpt ATTEMPT LINES : the end of an attempt's log, short enough for a phone
+log_excerpt() {
+  tail -n "$2" "log.$1.tail" 2>/dev/null | cut -c1-200
+}
+
+# report_excerpt CHARS : the start of the latest wake report, whole lines only
+report_excerpt() {
+  awk -v max="$1" '/^== after attempt /{buf=""; n=0; full=0; next}
+    NF && !full { if (n + length($0) > max && n > 0) { full=1; next } buf = buf $0 "\n"; n += length($0) }
+    END { printf "%s", buf; if (full) print "(more in the full report)" }' wake_report.md
+}
+
 cmd__watch() {
-  local id=$1 st code raw n out unknown p msg
+  local id=$1 st code raw n out unknown p est ecode adv queued down down_limit capped details
   J=$ROOT/jobs/$id
   . "$J/watch.conf"
   cd "$J"
   set +e
   echo $$ > watch.pid
   watch_log "watcher started (pid $$)"
+  down=0
+  down_limit=$(( (1800 + POLL_SECONDS - 1) / POLL_SECONDS ))   # 30 minutes
 
   while :; do
     echo waiting > watch.phase
-    unknown=0
+    unknown=0; queued=0
     while :; do
       out=$(compute _job_state "$id" </dev/null)
       if [ -n "$out" ]; then
+        if [ "$down" -ge "$down_limit" ]; then
+          notify "$NAME: $HOST is reachable again" "The watcher reached $HOST again and keeps following the job."
+        fi
+        down=0
         read -r st code raw n <<<"$out"
         case $st in
-          PENDING|RUNNING) unknown=0 ;;
+          PENDING) unknown=0; queued=$((queued + 1)) ;;
+          RUNNING)
+            unknown=0
+            if [ "$queued" -gt 0 ]; then
+              notify "$NAME: attempt $n is running on $HOST" "It left the queue. Time in the queue since the handoff: about $(( (queued * POLL_SECONDS + 59) / 60 )) min."
+              queued=0
+            fi ;;
           UNKNOWN)
             unknown=$((unknown + 1))
             if [ "$unknown" -ge 5 ]; then st=ENDED; break; fi ;;
           *) break ;;
         esac
       else
+        down=$((down + 1))
         watch_log "compute host not reachable, retrying"
+        if [ "$down" -eq "$down_limit" ]; then
+          notify "$NAME: cannot reach $HOST" "The watcher has not reached $HOST for $(( down * POLL_SECONDS / 60 )) min. It keeps trying. The job itself may still be running."
+        fi
       fi
       sleep "$POLL_SECONDS"
     done
 
     echo post > watch.phase
-    echo "$n $st $code $raw $(now)" >> attempts
-    watch_log "attempt $n ended: $st (exit $code)"
+    est=$st; ecode=$code
+    echo "$n $est $ecode $raw $(now)" >> attempts
+    watch_log "attempt $n ended: $est (exit $ecode)"
     compute_retry _job_tail "$id" "$LOG_TAIL" </dev/null > "log.$n.tail" 2>&1
     {
-      echo "== after attempt $n: $st (exit $code) =="
-      compute_retry _job_playbook "$id" "$st" "$code" </dev/null
+      echo "== after attempt $n: $est (exit $ecode) =="
+      compute_retry _job_playbook "$id" "$est" "$ecode" </dev/null
     } >> playbook.out 2>&1
-    watch_log "advance: $(compute_retry _job_advance "$id" "$MAX_ATTEMPTS" </dev/null)"
+    adv=$(compute_retry _job_advance "$id" "$MAX_ATTEMPTS" </dev/null)
+    watch_log "advance: $adv"
     read -r st code raw p < <(compute_retry _job_state "$id" </dev/null)
-    if [ "$p" != "$n" ]; then continue; fi
+    if [ "$p" != "$n" ]; then
+      notify "$NAME: attempt $n $est, the playbook started attempt $p" "$(printf 'Last log lines of attempt %s:\n%s' "$n" "$(log_excerpt "$n" 8)")"
+      continue
+    fi
 
     if [ "$WAKE" = 1 ]; then
       write_brief > brief.md
       watch_log "waking the agent ($WAKE_MODE)"
-      echo "== after attempt $n: $st (exit $code) ==" >> wake_report.md
+      echo "== after attempt $n: $est (exit $ecode) ==" >> wake_report.md
       HANDOFF_BRIEF=$J/brief.md bash -c "$WAKE_CMD" </dev/null >> wake_report.md 2>> watch.log
       watch_log "agent exited with $?"
       if [ "$WAKE_MODE" = act ] && [ -s next_cmd ]; then
         compute_retry _job_setnext "$id" < next_cmd
         mv next_cmd "next_cmd.$n"
-        watch_log "advance: $(compute_retry _job_advance "$id" "$MAX_ATTEMPTS" </dev/null)"
+        adv=$(compute_retry _job_advance "$id" "$MAX_ATTEMPTS" </dev/null)
+        watch_log "advance: $adv"
         read -r st code raw p < <(compute_retry _job_state "$id" </dev/null)
-        if [ "$p" != "$n" ]; then continue; fi
+        if [ "$p" != "$n" ]; then
+          notify "$NAME: attempt $n $est, the agent started attempt $p" "$(printf 'Agent report:\n%s' "$(report_excerpt 1500)")"
+          continue
+        fi
       fi
     fi
     break
@@ -773,10 +822,15 @@ cmd__watch() {
     done <<<"$FETCH"
     watch_log "results fetched to the relay"
   fi
-  if [ -n "$NOTIFY_CMD" ]; then
-    msg="job-handoff: $NAME on $HOST ended as $st after $n attempt(s)"
-    bash -c "$NOTIFY_CMD" _ "$msg" </dev/null >> watch.log 2>&1
+
+  capped=; [ "$adv" = CAPPED ] && capped=", attempt cap reached"
+  details=$(awk '{printf "%s %s (exit %s)\n", $1, $2, $3}' attempts)
+  if [ "$WAKE" = 1 ] && [ -s wake_report.md ]; then
+    details=$(printf 'Attempts:\n%s\n\nAgent report:\n%s' "$details" "$(report_excerpt 1500)")
+  else
+    details=$(printf 'Attempts:\n%s\n\nLast log lines:\n%s' "$details" "$(log_excerpt "$n" 10)")
   fi
+  notify "$NAME on $HOST: $est after $n attempt(s)$capped" "$(printf '%s\n\nOn return: handoff back %s' "$details" "$ID")"
   echo "done" > watch.phase
   watch_log "watcher finished"
 }

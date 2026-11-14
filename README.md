@@ -103,6 +103,28 @@ fi
 A handoff runs at most `MAX_ATTEMPTS` times (default 3), so a rule cannot loop
 forever. More in the [playbook reference](skills/job-handoff/references/playbook.md).
 
+### Status on your phone
+
+The watcher can push status messages to your phone while the laptop is closed.
+They are one-way: you read them, and nothing can be sent back to your servers.
+
+| When | Message |
+|---|---|
+| A queued job starts running | `bert-ft: attempt 1 is running on hpc` |
+| A run ends and the playbook starts the next one | `bert-ft: attempt 1 FAILED, the playbook started attempt 2`, with the last log lines |
+| The compute host is unreachable for 30 minutes, and again when it is back | `bert-ft: cannot reach lab` |
+| The handoff ends | `bert-ft on lab: COMPLETED after 2 attempt(s)`, with every attempt and the start of the agent's report, or the last log lines |
+
+To set it up, install the [ntfy](https://ntfy.sh) app, subscribe to a long
+random topic, and add one line to `~/.job-handoff/config`:
+
+```bash
+NOTIFY_CMD='curl -fsS -o /dev/null -H "Title: $1" -d "$2" https://ntfy.sh/jh-your-long-random-topic'
+```
+
+Or ask your agent to set up phone notifications. Bark and Feishu work too:
+see the [configuration reference](skills/job-handoff/references/configuration.md#phone-notifications).
+
 ### Where the watcher runs
 
 | Your situation | Watch host |
@@ -133,6 +155,7 @@ the remote hosts, which Linux has by default.
 | You say | The agent does |
 |---|---|
 | “Set up job-handoff for my server `lab`” | Asks about hosts, relay, notification and Layer 2, writes the configuration, runs `handoff doctor`. |
+| “Set up phone notifications” | Generates a private ntfy topic for you to subscribe to, writes the command, sends a test message. |
 | “Start the training on `lab`” | Starts it with `handoff launch`, so it survives the session. |
 | “I have to go” | Writes the handoff notes, proposes a playbook for your approval, runs `handoff leave`, and tells you what will and will not happen while you are away. |
 | “I’m back” | Runs `handoff back`, reads the report, collects the results, and continues the work. |
@@ -178,8 +201,9 @@ All settings: [configuration reference](skills/job-handoff/references/configurat
 >   controls that account.
 > - Results prefetched to a relay are stored on it. Do not prefetch data that
 >   must not leave the compute site.
-> - Messages sent to public notification services can be read by anyone who
->   knows the topic.
+> - Notifications carry the job name, log lines and the start of the agent's
+>   report. On a public service such as ntfy.sh, anyone who knows the topic can
+>   read them. Use a long random topic.
 > - Nothing thinks in Layer 1. A failure the playbook did not foresee waits
 >   until you return.
 
@@ -221,6 +245,7 @@ Version 0.1.0.
 | SLURM: launch, playbook follow-up, cancel, adopt, return, fetch | ✅ Real cluster (SLURM 25.11) |
 | Relay, with the compute host behind a bastion | ✅ Real servers |
 | Layer 2 `report` mode | ✅ Real Claude Code and real Codex |
+| Phone notifications (ntfy): follow-up, final result with the agent's summary | ✅ Real phone |
 | Layer 2 `act` mode | 🧪 Simulation only |
 | macOS as the local machine | ⬜ Not tested |
 

@@ -101,6 +101,26 @@ fi
 一次交接最多运行 `MAX_ATTEMPTS` 轮（默认 3），规则不会无限循环。
 更多写法见[预案说明](skills/job-handoff/references/playbook.md)（英文）。
 
+### 手机上看状态
+
+电脑合上期间，守望脚本可以把状态推送到你的手机。推送是单向的：你只能查看，手机上发不出任何指令到服务器。
+
+| 什么时候 | 消息 |
+|---|---|
+| 排队的作业开始运行 | `bert-ft: attempt 1 is running on hpc` |
+| 一轮结束，预案启动了下一轮 | `bert-ft: attempt 1 FAILED, the playbook started attempt 2`，附日志最后几行 |
+| 连续 30 分钟连不上计算服务器，以及恢复连接时 | `bert-ft: cannot reach lab` |
+| 交接结束 | `bert-ft on lab: COMPLETED after 2 attempt(s)`，附每一轮的结果，以及 agent 报告的开头或日志最后几行 |
+
+配置方法：手机装 [ntfy](https://ntfy.sh)，订阅一个足够长的随机主题名，再在 `~/.job-handoff/config` 里加一行：
+
+```bash
+NOTIFY_CMD='curl -fsS -o /dev/null -H "Title: $1" -d "$2" https://ntfy.sh/jh-your-long-random-topic'
+```
+
+也可以直接让 agent 帮你配置手机通知。Bark 和飞书也能用，
+见[配置说明](skills/job-handoff/references/configuration.md#phone-notifications)（英文）。
+
 ### 守望脚本跑在哪里
 
 | 你的情况 | 守望机 |
@@ -130,6 +150,7 @@ git clone https://github.com/Catchxu/job-handoff.git
 | 你说 | agent 做的事 |
 |---|---|
 | “帮我给服务器 `lab` 配置 job-handoff” | 询问服务器、中转机、通知方式和是否开第二层，写好配置，运行 `handoff doctor` 检查。 |
+| “帮我配置手机通知” | 生成一个私密的 ntfy 主题名给你订阅，写好命令，发一条测试消息。 |
 | “在 `lab` 上开始训练” | 用 `handoff launch` 启动，任务不会随会话断掉。 |
 | “我要走了” | 写交接说明，拟一份预案给你确认，运行 `handoff leave`，并告诉你离开期间会发生什么、不会发生什么。 |
 | “我回来了” | 运行 `handoff back`，读报告，收回结果，接着干活。 |
@@ -171,7 +192,7 @@ handoff launch --host hpc --name bert-ft --dir ~/proj -- train.sbatch
 > - 中转机上存着一把能登录你计算服务器的 SSH 密钥。请在中转机上新生成一把专用密钥，
 >   绝不要把个人私钥复制过去，并遵守实验室或集群的访问规定。谁控制了中转机，谁就控制了那个账号。
 > - 提前取回的结果会存放在中转机上。不允许离开计算站点的数据，不要设置提前取回。
-> - 发到公共通知服务的消息，任何知道主题名的人都能看到。
+> - 通知里有任务名、日志片段和 agent 报告的开头。在 ntfy.sh 这类公共服务上，任何知道主题名的人都能看到，请用足够长的随机主题名。
 > - 第一层没有任何判断力。预案没预见到的失败，只能等你回来处理。
 
 > [!CAUTION]
@@ -208,6 +229,7 @@ handoff launch --host hpc --name bert-ft --dir ~/proj -- train.sbatch
 | SLURM：启动、预案续跑、取消、接管已有作业、返回、取回结果 | ✅ 真实集群（SLURM 25.11） |
 | 中转机，计算服务器在堡垒机后面 | ✅ 真实服务器 |
 | 第二层 `report` 模式 | ✅ 真实的 Claude Code 和 Codex |
+| 手机通知（ntfy）：续跑、最终结果和 agent 摘要 | ✅ 真实手机 |
 | 第二层 `act` 模式 | 🧪 只在模拟环境中测试 |
 | 本机为 macOS | ⬜ 未测试 |
 

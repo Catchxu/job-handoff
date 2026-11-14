@@ -3,9 +3,9 @@
 
     python3 assets/make_diagrams.py
 
-Writes banner.svg plus flow-<lang>-<theme>.svg and layers-<lang>-<theme>.svg
-next to this file. Edit the TEXT table to change wording; both languages and
-both themes are drawn from the same layout.
+Writes banner.svg plus flow-<lang>.svg and layers-<lang>.svg next to this
+file. Edit the TEXT table to change wording; both languages are drawn from the
+same layout.
 """
 from pathlib import Path
 
@@ -14,12 +14,10 @@ SANS = ('-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, 
         '"PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif')
 MONO = 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace'
 
-THEMES = {
-    "light": dict(fg="#1f2328", muted="#59636e", line="#d1d9e0", card="#ffffff", life="#afb8c1",
-                  blue="#0969da", purple="#8250df", green="#1a7f37", soft=0.07, chip="#eff2f5"),
-    "dark": dict(fg="#f0f6fc", muted="#9198a1", line="#3d444d", card="#0d1117", life="#484f58",
-                 blue="#4493f8", purple="#ab7df8", green="#3fb950", soft=0.13, chip="#212830"),
-}
+# One palette. Every diagram carries its own white background, so it reads the
+# same on light and dark pages whatever the viewer's colour scheme is.
+C = dict(fg="#1f2328", muted="#59636e", line="#d1d9e0", card="#ffffff", life="#afb8c1",
+         blue="#0969da", purple="#8250df", green="#1a7f37", soft=0.07, chip="#eff2f5")
 
 TEXT = {
     "en": dict(
@@ -119,9 +117,17 @@ def width_of(s, size, latin=0.52):
     return sum(size if ord(c) > 0x2E7F else size * latin for c in s)
 
 
-def svg(w, h, body):
-    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{w}" height="{h}">'
-            + "".join(body) + "</svg>\n")
+def svg(w, h, body, background=True):
+    """Wrap the shapes. Diagrams get a white card with a margin around the layout."""
+    if not background:
+        return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{w}" height="{h}">'
+                + "".join(body) + "</svg>\n")
+    pad = 22
+    W, H = w + 2 * pad, h + 2 * pad
+    back = (f'<rect x="{0.75 - pad}" y="{0.75 - pad}" width="{W - 1.5}" height="{H - 1.5}" rx="20" '
+            f'fill="#ffffff" stroke="{C["line"]}" stroke-width="1.5"/>')
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{-pad} {-pad} {W} {H}" width="{W}" height="{H}">'
+            + back + "".join(body) + "</svg>\n")
 
 
 def tag(x, y, label, color):
@@ -133,8 +139,8 @@ def tag(x, y, label, color):
 
 # --------------------------------------------------------------------- flow
 
-def flow(lang, theme):
-    t, c = TEXT[lang], THEMES[theme]
+def flow(lang):
+    t, c = TEXT[lang], C
     W, H = 1000, 668
     X = [165, 500, 835]
     b = [f'<defs>' + "".join(
@@ -241,8 +247,8 @@ def flow(lang, theme):
 
 # ------------------------------------------------------------------- layers
 
-def layers(lang, theme):
-    t, c = TEXT[lang], THEMES[theme]
+def layers(lang):
+    t, c = TEXT[lang], C
     W, H = 1000, 368
     b = []
     for i, (layer, color) in enumerate(zip(t["layers"], ("blue", "purple"))):
@@ -306,13 +312,12 @@ def banner():
     b.append(f'<circle cx="500" cy="{y + 30}" r="7" fill="{white}"/>')
     b.append(f'<circle cx="652" cy="{y + 2}" r="5" fill="#4ade80"/>')
     b.append(text(W / 2, 190, "job-handoff", 50, white, 700, font=MONO, spacing="-0.01em"))
-    return svg(W, H, b)
+    return svg(W, H, b, background=False)
 
 
 if __name__ == "__main__":
     (OUT / "banner.svg").write_text(banner(), encoding="utf-8")
     for lang in TEXT:
-        for theme in THEMES:
-            (OUT / f"flow-{lang}-{theme}.svg").write_text(flow(lang, theme), encoding="utf-8")
-            (OUT / f"layers-{lang}-{theme}.svg").write_text(layers(lang, theme), encoding="utf-8")
+        (OUT / f"flow-{lang}.svg").write_text(flow(lang), encoding="utf-8")
+        (OUT / f"layers-{lang}.svg").write_text(layers(lang), encoding="utf-8")
     print("wrote", len(list(OUT.glob("*.svg"))), "svg files to", OUT)

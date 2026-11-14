@@ -65,10 +65,7 @@ agent 通过自己的连接启动的任务，会跟着会话一起断掉。
 
 ## 工作方式
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/flow-zh-dark.svg">
-  <img src="assets/flow-zh-light.svg" alt="流程：handoff launch 在计算服务器上脱离终端启动任务；handoff leave 在守望机上启动守望脚本；电脑合上期间，守望脚本跟踪任务、执行预案，第二层还会唤醒 agent 写报告；handoff back 取回报告和结果。" width="100%">
-</picture>
+<img src="assets/flow-zh.svg" alt="流程：handoff launch 在计算服务器上脱离终端启动任务；handoff leave 在守望机上启动守望脚本；电脑合上期间，守望脚本跟踪任务、执行预案，第二层还会唤醒 agent 写报告；handoff back 取回报告和结果。" width="100%">
 
 - **`handoff launch`**：脱离终端启动任务，任务不会随会话断掉。
 - **`handoff leave`**：保存交接说明，启动守望脚本。之后可以合上电脑。
@@ -78,10 +75,7 @@ agent 通过自己的连接启动的任务，会跟着会话一起断掉。
 
 ## 两层实现
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/layers-zh-dark.svg">
-  <img src="assets/layers-zh-light.svg" alt="第一层“交接”默认开启：一个很小的守望脚本，没有 AI。第二层“唤醒”需主动开启：任务链结束时唤醒一个 agent。" width="100%">
-</picture>
+<img src="assets/layers-zh.svg" alt="第一层“交接”默认开启：一个很小的守望脚本，没有 AI。第二层“唤醒”需主动开启：任务链结束时唤醒一个 agent。" width="100%">
 
 | | 第一层 · 交接 | 第二层 · 唤醒 |
 |---|---|---|

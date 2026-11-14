@@ -67,10 +67,7 @@ behind a bastion or a campus cluster.
 
 ## How it works
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/flow-en-dark.svg">
-  <img src="assets/flow-en-light.svg" alt="Flow: handoff launch starts the job detached on the compute host. handoff leave starts a watcher on the watch host. While the laptop is closed the watcher follows the job, runs your playbook and, in Layer 2, wakes an agent that writes a report. handoff back returns the report and the results." width="100%">
-</picture>
+<img src="assets/flow-en.svg" alt="Flow: handoff launch starts the job detached on the compute host. handoff leave starts a watcher on the watch host. While the laptop is closed the watcher follows the job, runs your playbook and, in Layer 2, wakes an agent that writes a report. handoff back returns the report and the results." width="100%">
 
 - **`handoff launch`** starts the job detached, so it survives the session.
 - **`handoff leave`** stores the handoff notes and starts a watcher. The laptop can close.
@@ -80,10 +77,7 @@ One bash script does all of it. It copies itself to the remote hosts; nothing is
 
 ## Two layers
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/layers-en-dark.svg">
-  <img src="assets/layers-en-light.svg" alt="Layer 1, Handoff, is the default: a small watcher script, no AI. Layer 2, Wake, is opt-in: an agent wakes when the job chain ends." width="100%">
-</picture>
+<img src="assets/layers-en.svg" alt="Layer 1, Handoff, is the default: a small watcher script, no AI. Layer 2, Wake, is opt-in: an agent wakes when the job chain ends." width="100%">
 
 | | Layer 1 · Handoff | Layer 2 · Wake |
 |---|---|---|

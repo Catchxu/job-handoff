@@ -71,7 +71,9 @@ handoff host add <alias> [--relay <alias>]    # one per compute host
 handoff doctor                                # every line must say ok
 ```
 
-Edit `~/.job-handoff/config` for the notification and wake commands. All keys,
+Edit `~/.job-handoff/config` for the notification and wake commands, in the
+forms given in the reference: they keep topics, tokens, log lines and the brief
+out of process lists, which every user of a shared host can read. All keys,
 the relay setup, hosts that need a custom transfer command, clusters with
 two-factor login, and ready-made wake commands for Claude Code and Codex are in
 `references/configuration.md`. Read it before writing the config.

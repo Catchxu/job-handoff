@@ -79,7 +79,7 @@ install_remote() {
   local mark=$ROOT/hosts/.installed-$1 sum
   sum=$(cksum < "$SELF")
   if [ -f "$mark" ] && [ "$(cat "$mark")" = "$sum" ]; then return 0; fi
-  ssh -o BatchMode=yes -o LogLevel=ERROR "$1" 'mkdir -p "$HOME/.job-handoff/bin" && cat > "$HOME/.job-handoff/bin/handoff.new" && chmod +x "$HOME/.job-handoff/bin/handoff.new" && mv "$HOME/.job-handoff/bin/handoff.new" "$HOME/.job-handoff/bin/handoff"' < "$SELF"
+  ssh -o BatchMode=yes -o LogLevel=ERROR "$1" 'mkdir -p "$HOME/.job-handoff/bin" && chmod 700 "$HOME/.job-handoff" && cat > "$HOME/.job-handoff/bin/handoff.new" && chmod +x "$HOME/.job-handoff/bin/handoff.new" && mv "$HOME/.job-handoff/bin/handoff.new" "$HOME/.job-handoff/bin/handoff"' < "$SELF"
   echo "$sum" > "$mark"
 }
 
@@ -127,6 +127,7 @@ EOF
 
 cmd_init() {
   mkdir -p "$ROOT/hosts" "$ROOT/jobs"
+  chmod 700 "$ROOT"
   if [ -f "$ROOT/config" ]; then echo "exists: $ROOT/config"; return 0; fi
   cat > "$ROOT/config" <<'EOF'
 # job-handoff configuration, read by bash.
@@ -135,13 +136,14 @@ POLL_SECONDS=60     # how often the watcher checks the job
 MAX_ATTEMPTS=3      # runs per handoff: the first one plus follow-ups
 LOG_TAIL=200        # log lines kept for the report and the wake brief
 
-# Runs on the watch host when a handoff ends. $1 is a one-line message.
-# NOTIFY_CMD='curl -fsS -d "$1" https://ntfy.sh/your-private-topic'
+# Phone status, run on the watch host: $1 is the title, the details are on stdin.
+# NOTIFY_CMD='curl -fsS -o /dev/null --data-binary @- -K <(printf "url = https://ntfy.sh/jh-your-long-random-topic\nheader = \"Title: %s\"\n" "$1")'
 NOTIFY_CMD=''
 
 # Layer 2: wake an agent when a handoff ends. Read the warnings first.
 # WAKE_MODE: report (no tools, writes a report) | act (may run commands)
-# WAKE_CMD runs on the watch host; the brief is the file "$HANDOFF_BRIEF".
+# WAKE_CMD runs on the watch host with the brief on stdin (also "$HANDOFF_BRIEF").
+# WAKE_CMD='claude -p --tools ""'
 WAKE_MODE=report
 WAKE_CMD=''
 EOF
@@ -166,6 +168,7 @@ cmd_host() {
         shift 2
       done
       mkdir -p "$ROOT/hosts" "$ROOT/jobs"
+      chmod 700 "$ROOT"
       if [ -z "$SCHEDULER" ]; then
         SCHEDULER=$(ssh -o BatchMode=yes -o LogLevel=ERROR "$alias" 'bash -c "command -v sbatch >/dev/null && echo slurm || echo none"' </dev/null)
       fi
@@ -712,11 +715,14 @@ cmd__watch_phase() {
 
 # notify TITLE DETAILS : run NOTIFY_CMD on this host. The title is one line;
 # the details are a few lines, kept under the 4 KB that push services accept.
+# The command is evaluated in a subshell instead of `bash -c`, and the details
+# go to its stdin, so neither the topic nor log lines show up in `ps` on a
+# shared host. "$2" holds the details too, for older commands.
 notify() {
   [ -n "$NOTIFY_CMD" ] || return 0
   local details
   details=$(printf '%s\n' "$2" | head -c 3500 | iconv -f UTF-8 -t UTF-8 -c)
-  bash -c "$NOTIFY_CMD" _ "$1" "$details" </dev/null >> watch.log 2>&1 || watch_log "notification failed"
+  ( set -- "$1" "$details"; eval "$NOTIFY_CMD" ) <<<"$details" >> watch.log 2>&1 || watch_log "notification failed"
 }
 
 # log_excerpt ATTEMPT LINES : the end of an attempt's log, short enough for a phone
@@ -797,7 +803,7 @@ cmd__watch() {
       write_brief > brief.md
       watch_log "waking the agent ($WAKE_MODE)"
       echo "== after attempt $n: $est (exit $ecode) ==" >> wake_report.md
-      HANDOFF_BRIEF=$J/brief.md bash -c "$WAKE_CMD" </dev/null >> wake_report.md 2>> watch.log
+      ( export HANDOFF_BRIEF=$J/brief.md; eval "$WAKE_CMD" ) < brief.md >> wake_report.md 2>> watch.log
       watch_log "agent exited with $?"
       if [ "$WAKE_MODE" = act ] && [ -s next_cmd ]; then
         compute_retry _job_setnext "$id" < next_cmd

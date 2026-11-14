@@ -115,7 +115,7 @@ fi
 配置方法：手机装 [ntfy](https://ntfy.sh)，订阅一个足够长的随机主题名，再在 `~/.job-handoff/config` 里加一行：
 
 ```bash
-NOTIFY_CMD='curl -fsS -o /dev/null -H "Title: $1" -d "$2" https://ntfy.sh/jh-your-long-random-topic'
+NOTIFY_CMD='curl -fsS -o /dev/null --data-binary @- -K <(printf "url = https://ntfy.sh/jh-your-long-random-topic\nheader = \"Title: %s\"\n" "$1")'
 ```
 
 也可以直接让 agent 帮你配置手机通知。Bark 和飞书也能用，
@@ -193,6 +193,7 @@ handoff launch --host hpc --name bert-ft --dir ~/proj -- train.sbatch
 >   绝不要把个人私钥复制过去，并遵守实验室或集群的访问规定。谁控制了中转机，谁就控制了那个账号。
 > - 提前取回的结果会存放在中转机上。不允许离开计算站点的数据，不要设置提前取回。
 > - 通知里有任务名、日志片段和 agent 报告的开头。在 ntfy.sh 这类公共服务上，任何知道主题名的人都能看到，请用足够长的随机主题名。
+> - 每台机器上存了什么、哪些内容会发出去：见[隐私说明](skills/job-handoff/references/configuration.md#privacy)（英文）。
 > - 第一层没有任何判断力。预案没预见到的失败，只能等你回来处理。
 
 > [!CAUTION]

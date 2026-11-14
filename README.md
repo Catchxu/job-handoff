@@ -119,7 +119,7 @@ To set it up, install the [ntfy](https://ntfy.sh) app, subscribe to a long
 random topic, and add one line to `~/.job-handoff/config`:
 
 ```bash
-NOTIFY_CMD='curl -fsS -o /dev/null -H "Title: $1" -d "$2" https://ntfy.sh/jh-your-long-random-topic'
+NOTIFY_CMD='curl -fsS -o /dev/null --data-binary @- -K <(printf "url = https://ntfy.sh/jh-your-long-random-topic\nheader = \"Title: %s\"\n" "$1")'
 ```
 
 Or ask your agent to set up phone notifications. Bark and Feishu work too:
@@ -204,6 +204,7 @@ All settings: [configuration reference](skills/job-handoff/references/configurat
 > - Notifications carry the job name, log lines and the start of the agent's
 >   report. On a public service such as ntfy.sh, anyone who knows the topic can
 >   read them. Use a long random topic.
+> - What each host stores and what leaves it: see [privacy](skills/job-handoff/references/configuration.md#privacy).
 > - Nothing thinks in Layer 1. A failure the playbook did not foresee waits
 >   until you return.
 

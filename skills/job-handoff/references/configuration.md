@@ -22,9 +22,9 @@ Created by `handoff init`. It is a bash file.
 | `POLL_SECONDS` | `60` | How often the watcher checks the job. |
 | `MAX_ATTEMPTS` | `3` | Runs per handoff: the first one plus follow-ups from the playbook or the agent. |
 | `LOG_TAIL` | `200` | Log lines kept for the report and the wake brief. |
-| `NOTIFY_CMD` | empty | Command run on the watch host to push a status message: `$1` is the title, `$2` the details. See [Phone notifications](#phone-notifications). |
+| `NOTIFY_CMD` | empty | Command run on the watch host to push a status message: `$1` is the title, the details arrive on stdin. See [Phone notifications](#phone-notifications). |
 | `WAKE_MODE` | `report` | Layer 2 mode: `report` or `act`. |
-| `WAKE_CMD` | empty | Layer 2 command, run on the watch host. Empty means Layer 2 cannot be used. |
+| `WAKE_CMD` | empty | Layer 2 command, run on the watch host with the brief on stdin. Empty means Layer 2 cannot be used. |
 
 Settings are copied to the watch host at `handoff leave`; a change applies to
 the next handoff.
@@ -41,22 +41,26 @@ phone shows status, it cannot send anything back.
 | The compute host has been unreachable for 30 minutes, and when it is reachable again | `NAME: cannot reach HOST` | What the watcher is doing |
 | The handoff ends | `NAME on HOST: STATE after N attempt(s)` | Every attempt with its exit code, then the start of the agent's report (Layer 2) or the last 10 log lines |
 
-`$1` is one line of ASCII text. `$2` is a few lines of UTF-8 text, at most
-3500 bytes.
+`$1` is one line of ASCII text. The details, a few lines of UTF-8 text and at
+most 3500 bytes, arrive on stdin (and in `$2`, for older commands).
 
 A topic on a public service works like a password. Generate a long random one:
 `openssl rand -hex 10`.
 
 ```bash
 # ntfy (app for iOS and Android)
-NOTIFY_CMD='curl -fsS -o /dev/null -H "Title: $1" -d "$2" https://ntfy.sh/jh-your-long-random-topic'
+NOTIFY_CMD='curl -fsS -o /dev/null --data-binary @- -K <(printf "url = https://ntfy.sh/jh-your-long-random-topic\nheader = \"Title: %s\"\n" "$1")'
 
 # Bark (iOS)
-NOTIFY_CMD='curl -fsS -o /dev/null --data-urlencode "title=$1" --data-urlencode "body=$2" https://api.day.app/YOUR_DEVICE_KEY'
+NOTIFY_CMD='curl -fsS -o /dev/null --data-urlencode "title=$1" --data-urlencode "body@-" -K <(echo "url = https://api.day.app/YOUR_DEVICE_KEY")'
 
 # Feishu / Lark bot webhook (needs python3 on the watch host)
-NOTIFY_CMD='python3 -c "import json,sys; print(json.dumps({\"msg_type\": \"text\", \"content\": {\"text\": sys.argv[1] + \"\n\" + sys.argv[2]}}))" "$1" "$2" | curl -fsS -o /dev/null -H "Content-Type: application/json" -d @- https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_TOKEN'
+NOTIFY_CMD='python3 -c "import json,sys; print(json.dumps({\"msg_type\": \"text\", \"content\": {\"text\": sys.argv[1] + \"\n\" + sys.stdin.read()}}))" "$1" | curl -fsS -o /dev/null -H "Content-Type: application/json" -d @- -K <(echo "url = https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_TOKEN")'
 ```
+
+Keep these forms. Any user of a shared host can read the arguments of every
+running process (`ps`). Here the URL with the topic, key or token reaches curl
+through `-K <(...)`, and the details through stdin, so neither appears there.
 
 The watch host must be able to reach the service. Test the command once from
 the watch host before the first handoff:
@@ -126,8 +130,9 @@ free disk space against the size of the results.
 ## Layer 2: the wake command
 
 `WAKE_CMD` runs on the watch host, in the handoff's folder, when the job chain
-ends. The brief is the file `$HANDOFF_BRIEF`; whatever the command prints is
-saved as the wake report.
+ends. The brief arrives on stdin and is also the file `$HANDOFF_BRIEF`; whatever
+the command prints is saved as the wake report. Read the brief from stdin, not
+from an argument: arguments are visible to every user of a shared host.
 
 Requirements on the watch host:
 
@@ -148,9 +153,9 @@ Requirements on the watch host:
 ```bash
 WAKE_MODE=report
 # Claude Code
-WAKE_CMD='claude -p "$(cat "$HANDOFF_BRIEF")" --tools ""'
+WAKE_CMD='claude -p --tools ""'
 # Codex
-WAKE_CMD='codex exec --sandbox read-only --skip-git-repo-check "$(cat "$HANDOFF_BRIEF")"'
+WAKE_CMD='codex exec --sandbox read-only --skip-git-repo-check -'
 ```
 
 `act` mode, the agent may run commands. Read the Layer 2 warnings in `SKILL.md`
@@ -159,11 +164,11 @@ with the user first.
 ```bash
 WAKE_MODE=act
 # Claude Code on a relay: shell access limited to ssh into the compute host
-WAKE_CMD='claude -p "$(cat "$HANDOFF_BRIEF")" --allowedTools "Bash(ssh lab *)" "Read" "Write"'
+WAKE_CMD='claude -p --allowedTools "Bash(ssh lab *)" "Read" "Write"'
 # Claude Code on the compute host itself: unrestricted shell
-WAKE_CMD='claude -p "$(cat "$HANDOFF_BRIEF")" --allowedTools "Bash" "Read" "Write"'
+WAKE_CMD='claude -p --allowedTools "Bash" "Read" "Write"'
 # Codex: ssh needs network access, which only the unsandboxed mode gives
-WAKE_CMD='codex exec --sandbox danger-full-access --skip-git-repo-check "$(cat "$HANDOFF_BRIEF")"'
+WAKE_CMD='codex exec --sandbox danger-full-access --skip-git-repo-check -'
 ```
 
 Replace `lab` with the compute host's alias on the relay. In `act` mode the
@@ -172,4 +177,21 @@ watcher starts and follows it, within `MAX_ATTEMPTS`.
 
 `handoff doctor` does not run the wake command. Test it once by hand, in the
 same non-interactive shell the watcher uses:
-`ssh <watch host> 'export PATH=$HOME/.local/bin:$PATH; claude -p "say ok" --tools ""'`.
+`echo "say ok" | ssh <watch host> 'export PATH=$HOME/.local/bin:$PATH; claude -p --tools ""'`.
+
+## Privacy
+
+| Where | What job-handoff keeps or sends there |
+|---|---|
+| Your machine, `~/.job-handoff` | The configuration with the notification topic, host profiles, handoff notes. |
+| Compute host, `~/.job-handoff` | The script, job commands, logs of plain-host jobs, the playbook. |
+| Watch host, `~/.job-handoff` | Notes, settings with the notification topic, log tails, reports. On a relay also prefetched results. |
+| Relay | Its own SSH key to the compute host; for Layer 2, the agent's login. |
+| Push service | Titles and details: job name, host alias, log lines, the start of the agent's report. |
+| Claude or Codex provider (Layer 2) | The brief: notes, log tails, playbook output. |
+
+`handoff` creates `~/.job-handoff` with mode 700 on every host, so other users
+of a shared server cannot read it. Files your job writes keep your usual
+permissions. The script uses your SSH configuration as it is: it never reads,
+copies or sends SSH keys or passwords, and the conversation with your agent
+stays on your machine.
